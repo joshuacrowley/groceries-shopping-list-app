@@ -2,13 +2,13 @@ import React from "react";
 import { useNetworkState } from "expo-network";
 import { Redirect, router, Stack } from "expo-router";
 import { Alert } from "react-native";
-import { Provider as TinyBaseProvider } from "tinybase/ui-react";
 import { Inspector } from "tinybase/ui-react-inspector";
 import { Button } from "@/components/ui/button";
 import { ListCreationProvider } from "@/context/ListCreationContext";
-import ShoppingListsStore from "@/stores/ShoppingListsStore";
 import { SignedIn, useUser } from "@clerk/clerk-expo";
 import { WidgetProvider } from "@/contexts/WidgetContext";
+import TTTStoreProvider from "@/stores/TTTStore";
+import DebugInfo from "@/components/DebugInfo";
 
 export const unstable_settings = {
   initialRouteName: "index",
@@ -36,9 +36,8 @@ export default function AppIndexLayout() {
 
   return (
     <SignedIn>
-      <TinyBaseProvider>
+      <TTTStoreProvider>
         <WidgetProvider>
-          <ShoppingListsStore />
           <ListCreationProvider>
             <Stack
               screenOptions={{
@@ -63,6 +62,12 @@ export default function AppIndexLayout() {
                   presentation: "formSheet",
                   sheetGrabberVisible: true,
                   headerShown: false,
+                }}
+              />
+              <Stack.Screen
+                name="list/[listId]/index"
+                options={{
+                  headerShown: false
                 }}
               />
               <Stack.Screen
@@ -118,6 +123,12 @@ export default function AppIndexLayout() {
                 }}
               />
               <Stack.Screen
+                name="test"
+                options={{
+                  headerShown: false
+                }}
+              />
+              <Stack.Screen
                 name="profile"
                 options={{
                   presentation: "formSheet",
@@ -150,8 +161,9 @@ export default function AppIndexLayout() {
           </ListCreationProvider>
 
           {process.env.EXPO_OS === "web" ? <Inspector /> : null}
+          <DebugInfo />
         </WidgetProvider>
-      </TinyBaseProvider>
+      </TTTStoreProvider>
     </SignedIn>
   );
 }

@@ -11,35 +11,32 @@ import {
 import { useUserIdAndNickname } from "@/hooks/useNickname";
 import { useCreateClientPersisterAndStart } from "@/stores/persistence/useCreateClientPersisterAndStart";
 import { useCreateServerSynchronizerAndStart } from "./synchronization/useCreateServerSynchronizerAndStart";
+import { SCHEMA, BACKGROUND_COLOUR, LIST_TYPE } from "./schema";
 
 const STORE_ID_PREFIX = "shoppingListStore-";
 
+// Define the values schema based on the lists schema from SCHEMA
 const VALUES_SCHEMA = {
   listId: { type: "string" },
   name: { type: "string" },
-  description: { type: "string" },
+  purpose: { type: "string" },
   emoji: { type: "string" },
-  color: { type: "string" },
+  backgroundColour: { 
+    type: "string",
+    default: "blue",
+    allow: BACKGROUND_COLOUR 
+  },
   createdAt: { type: "string" },
   updatedAt: { type: "string" },
-} as const;
-const TABLES_SCHEMA = {
-  products: {
-    id: { type: "string" },
-    name: { type: "string" },
-    quantity: { type: "number" },
-    units: { type: "string" },
-    isPurchased: { type: "boolean", default: false },
-    category: { type: "string", default: "" },
-    notes: { type: "string" },
-    createdBy: { type: "string" }, // userId
-    createdAt: { type: "string" },
-    updatedAt: { type: "string" },
-  },
-  collaborators: {
-    nickname: { type: "string" },
+  type: { 
+    type: "string", 
+    default: "Food", 
+    allow: LIST_TYPE 
   },
 } as const;
+
+// Define the tables schema using the todos schema from SCHEMA for products
+const TABLES_SCHEMA = SCHEMA;
 
 type Schemas = [typeof TABLES_SCHEMA, typeof VALUES_SCHEMA];
 type ShoppingListValueId = keyof typeof VALUES_SCHEMA;
@@ -63,18 +60,17 @@ const {
 
 const useStoreId = (listId: string) => STORE_ID_PREFIX + listId;
 
-// Returns a callback that adds a new product to the shopping list.
+// Update the useAddShoppingListProductCallback to use new schema fields
 export const useAddShoppingListProductCallback = (listId: string) => {
   const store = useStore(useStoreId(listId));
   const [userId] = useUserIdAndNickname();
   return useCallback(
-    (name: string, quantity: number, units: string, notes: string) => {
+    (text: string, amount: number, notes: string) => {
       const id = randomUUID();
       store.setRow("products", id, {
         id,
-        name,
-        quantity,
-        units,
+        text,
+        amount,
         notes,
         createdBy: userId,
         createdAt: new Date().toISOString(),

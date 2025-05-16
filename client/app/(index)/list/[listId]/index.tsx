@@ -1,125 +1,100 @@
-import React from "react";
-import * as Haptics from "expo-haptics";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Pressable, View } from "react-native";
-import Animated from "react-native-reanimated";
-import ShoppingListProductItem from "@/components/ShoppingListProductItem";
-import { ThemedText } from "@/components/ThemedText";
-import { BodyScrollView } from "@/components/ui/BodyScrollView";
-import Button from "@/components/ui/button";
-import { IconSymbol } from "@/components/ui/IconSymbol";
-import {
-  useShoppingListProductIds,
-  useShoppingListValue,
-} from "@/stores/ShoppingListStore";
+import React from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { useRow } from 'tinybase/ui-react';
+import TodoList from '@/Basic';
 
-export default function ListScreen() {
-  const router = useRouter();
-  const { listId } = useLocalSearchParams() as { listId: string };
-  const [name] = useShoppingListValue(listId, "name");
-  const [emoji] = useShoppingListValue(listId, "emoji");
-  const [description] = useShoppingListValue(listId, "description");
-  const newProductHref = {
-    pathname: "/list/[listId]/product/new",
-    params: { listId },
-  } as const;
+export default function ListDetailScreen() {
+  const { listId } = useLocalSearchParams();
+  const list = useRow('lists', listId as string);
+  
+  if (!list) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} style={styles.backButton}>
+            <Feather name="arrow-left" size={24} color="#2196F3" />
+          </Pressable>
+          <Text style={styles.title}>List not found</Text>
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>The requested list couldn't be found.</Text>
+          <Pressable 
+            style={styles.button} 
+            onPress={() => router.push('/(index)')}
+          >
+            <Text style={styles.buttonText}>Go to Home</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          headerTitle: emoji + " " + name,
-          headerRight: () => (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-              }}
-            >
-              <Pressable
-                onPress={() => {
-                  if (process.env.EXPO_OS === "ios") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  }
-                  router.push({
-                    pathname: "/list/[listId]/share",
-                    params: { listId },
-                  });
-                }}
-                style={{ padding: 8 }}
-              >
-                <IconSymbol name="square.and.arrow.up" color={"#007AFF"} />
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  if (process.env.EXPO_OS === "ios") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  }
-                  router.push({
-                    pathname: "/list/[listId]/edit",
-                    params: { listId },
-                  });
-                }}
-                style={{ padding: 8 }}
-              >
-                <IconSymbol
-                  name="pencil.and.list.clipboard"
-                  color={"#007AFF"}
-                />
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  if (process.env.EXPO_OS === "ios") {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  }
-                  router.push(newProductHref);
-                }}
-                style={{ paddingLeft: 8 }}
-              >
-                <IconSymbol name="plus" color={"#007AFF"} />
-              </Pressable>
-            </View>
-          ),
-        }}
-      />
-      <Animated.FlatList
-        data={useShoppingListProductIds(listId)}
-        renderItem={({ item: productId }) => (
-          <ShoppingListProductItem listId={listId} productId={productId} />
-        )}
-        contentContainerStyle={{
-          paddingTop: 12,
-        }}
-        contentInsetAdjustmentBehavior="automatic"
-        ListHeaderComponent={() =>
-          description ? (
-            <ThemedText
-              style={{ paddingHorizontal: 16, fontSize: 14, color: "gray" }}
-            >
-              {description}
-            </ThemedText>
-          ) : null
-        }
-        ListEmptyComponent={() => (
-          <BodyScrollView
-            contentContainerStyle={{
-              alignItems: "center",
-              gap: 8,
-              paddingTop: 100,
-            }}
-          >
-            <Button
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push(newProductHref);
-              }}
-              variant="ghost"
-            >
-              Add the first product to this list
-            </Button>
-          </BodyScrollView>
-        )}
-      />
-    </>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} style={styles.backButton}>
+          <Feather name="arrow-left" size={24} color="#2196F3" />
+        </Pressable>
+        <Text style={styles.title}>{list.name}</Text>
+        <Pressable style={styles.menuButton}>
+          <Feather name="more-vertical" size={24} color="#757575" />
+        </Pressable>
+      </View>
+      
+      <TodoList listId={listId as string} />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F5F5',
+  },
+  header: {
+    paddingTop: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  backButton: {
+    padding: 8,
+  },
+  title: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#212121',
+    marginLeft: 8,
+  },
+  menuButton: {
+    padding: 8,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#757575',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+});
