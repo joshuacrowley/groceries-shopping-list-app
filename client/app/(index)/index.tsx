@@ -41,6 +41,10 @@ export default function HomeScreen() {
   const goToTestScreen = () => {
     router.push('/(index)/test');
   };
+  
+  const goToListsScreen = () => {
+    router.push('/(index)/lists');
+  };
 
   if (isLoading) {
     return (
@@ -57,9 +61,14 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <View style={styles.orgHeader}>
         <Text style={styles.orgName}>{organization?.name || 'My Lists'}</Text>
-        <Pressable onPress={goToTestScreen} style={styles.testButton}>
-          <Text style={styles.testButtonText}>Test</Text>
-        </Pressable>
+        <View style={styles.headerButtons}>
+          <Pressable onPress={goToListsScreen} style={styles.navButton}>
+            <Text style={styles.navButtonText}>All Lists</Text>
+          </Pressable>
+          <Pressable onPress={goToTestScreen} style={styles.testButton}>
+            <Text style={styles.testButtonText}>Test</Text>
+          </Pressable>
+        </View>
       </View>
       
       {listIds.length === 0 ? (
@@ -127,6 +136,21 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     color: '#212121',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+  },
+  navButton: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginRight: 8,
+  },
+  navButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
   testButton: {
     backgroundColor: '#9C27B0',

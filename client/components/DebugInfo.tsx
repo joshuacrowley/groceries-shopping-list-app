@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useUser, useOrganization, useAuth } from '@clerk/clerk-expo';
 import { useStore, useRowIds } from 'tinybase/ui-react';
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 
 const DebugInfo = () => {
   const { isLoaded: userLoaded, isSignedIn, user } = useUser();
@@ -10,6 +11,7 @@ const DebugInfo = () => {
   const { getToken } = useAuth();
   const store = useStore();
   const listIds = useRowIds('lists') || [];
+  const router = useRouter();
   
   // Get server URL from environment
   const serverUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_SYNC_SERVER_URL || 'Not set';
@@ -18,12 +20,21 @@ const DebugInfo = () => {
   
   if (!expanded) {
     return (
-      <Pressable 
-        style={styles.debugButton} 
-        onPress={() => setExpanded(true)}
-      >
-        <Text style={styles.debugButtonText}>Show Debug Info</Text>
-      </Pressable>
+      <View>
+        <Pressable 
+          style={styles.debugButton} 
+          onPress={() => setExpanded(true)}
+        >
+          <Text style={styles.debugButtonText}>Show Debug Info</Text>
+        </Pressable>
+        
+        <Pressable 
+          style={[styles.debugButton, { bottom: 60 }]} 
+          onPress={() => router.push('/icon-test')}
+        >
+          <Text style={styles.debugButtonText}>Icon Test</Text>
+        </Pressable>
+      </View>
     );
   }
   
@@ -63,6 +74,13 @@ const DebugInfo = () => {
           }}
         >
           <Text style={styles.testButtonText}>Test Get Token</Text>
+        </Pressable>
+        
+        <Pressable 
+          style={[styles.testButton, { backgroundColor: '#4CAF50', marginTop: 10 }]}
+          onPress={() => router.push('/icon-test')}
+        >
+          <Text style={styles.testButtonText}>Go to Icon Test Screen</Text>
         </Pressable>
       </ScrollView>
       
@@ -111,6 +129,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   closeButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  testButton: {
+    backgroundColor: '#2196F3',
+    padding: 10,
+    alignItems: 'center',
+    margin: 12,
+    borderRadius: 8,
+  },
+  testButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
   },

@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import DynamicIcon from './DynamicIcon';
+import IconSelector from './IconSelector';
+import PhosphorIcon from './PhosphorIcon';
 import { randomUUID } from 'expo-crypto';
 import { useAddRowCallback } from 'tinybase/ui-react';
 import { BACKGROUND_COLOUR, LIST_TYPE } from '@/stores/schema';
@@ -8,7 +11,10 @@ import { BACKGROUND_COLOUR, LIST_TYPE } from '@/stores/schema';
 const ListCreationForm = ({ onComplete }) => {
   const [name, setName] = useState('');
   const [purpose, setPurpose] = useState('');
-  const [icon, setIcon] = useState('📝');
+  const [emoji, setEmoji] = useState('📝');
+  const [iconName, setIconName] = useState('ClipboardText');
+  const [useEmoji, setUseEmoji] = useState(true);
+  const [isIconSelectorOpen, setIsIconSelectorOpen] = useState(false);
   const [backgroundColour, setBackgroundColour] = useState('blue');
   const [listType, setListType] = useState('Info');
 
@@ -17,14 +23,15 @@ const ListCreationForm = ({ onComplete }) => {
     (listName) => ({
       name: listName,
       purpose: purpose,
-      icon: icon,
+      icon: useEmoji ? emoji : '',
+      iconName: useEmoji ? '' : iconName,
       backgroundColour: backgroundColour,
       type: listType,
       systemPrompt: '',
       template: '',
       code: '',
     }),
-    [purpose, icon, backgroundColour, listType]
+    [purpose, emoji, iconName, useEmoji, backgroundColour, listType]
   );
 
   const handleCreate = () => {
@@ -56,6 +63,20 @@ const ListCreationForm = ({ onComplete }) => {
     );
   };
 
+  // Map list types to icons for type selection
+  const typeToIconMap = {
+    'Shopping': 'ShoppingCart',
+    'Today': 'CalendarCheck',
+    'Recipes': 'CookingPot',
+    'Meals': 'ForkKnife',
+    'Weekend': 'Sunglasses',
+    'Info': 'Info',
+    'General': 'ClipboardText',
+    'Home': 'House',
+    'Health': 'HeartPulse',
+    'Work': 'Briefcase'
+  };
+
   const renderListTypeOption = (type) => {
     return (
       <Pressable 
@@ -64,8 +85,21 @@ const ListCreationForm = ({ onComplete }) => {
           backgroundColor: listType === type ? '#E3F2FD' : '#FFFFFF',
           borderColor: listType === type ? '#2196F3' : '#E0E0E0'
         }]}
-        onPress={() => setListType(type)}
+        onPress={() => {
+          setListType(type);
+          // Auto-set the icon based on type if using icons (not emoji)
+          if (!useEmoji) {
+            setIconName(typeToIconMap[type] || 'ClipboardText');
+          }
+        }}
       >
+        <View style={styles.listTypeIconContainer}>
+          <DynamicIcon 
+            iconName={typeToIconMap[type] || 'ClipboardText'}
+            size={18}
+            color={listType === type ? '#2196F3' : '#757575'}
+          />
+        </View>
         <Text style={{
           color: listType === type ? '#2196F3' : '#757575',
           fontWeight: listType === type ? 'bold' : 'normal'
@@ -99,11 +133,45 @@ const ListCreationForm = ({ onComplete }) => {
       />
       
       <Text style={styles.label}>Icon</Text>
-      <TextInput 
-        style={styles.iconInput}
-        value={icon}
-        onChangeText={setIcon}
-        maxLength={2}
+      <View style={styles.iconSelector}>
+        <Pressable 
+          style={[styles.iconTypeToggle, useEmoji ? styles.iconTypeSelected : {}]}
+          onPress={() => setUseEmoji(true)}
+        >
+          <Text style={styles.iconTypeText}>Emoji</Text>
+        </Pressable>
+        <Pressable 
+          style={[styles.iconTypeToggle, !useEmoji ? styles.iconTypeSelected : {}]}
+          onPress={() => setUseEmoji(false)}
+        >
+          <Text style={styles.iconTypeText}>Icon</Text>
+        </Pressable>
+      </View>
+      
+      {useEmoji ? (
+        <TextInput 
+          style={styles.iconInput}
+          value={emoji}
+          onChangeText={setEmoji}
+          maxLength={2}
+        />
+      ) : (
+        <Pressable 
+          style={styles.iconPickerButton}
+          onPress={() => setIsIconSelectorOpen(true)}
+        >
+          <View style={styles.selectedIcon}>
+            <DynamicIcon iconName={iconName} size={28} color="#424242" />
+          </View>
+          <Text style={styles.iconPickerText}>{iconName}</Text>
+          <Feather name="chevron-right" size={18} color="#757575" />
+        </Pressable>
+      )}
+      
+      <IconSelector 
+        isOpen={isIconSelectorOpen}
+        onClose={() => setIsIconSelectorOpen(false)}
+        onSelectIcon={setIconName}
       />
       
       <Text style={styles.label}>Background Color</Text>
@@ -154,6 +222,26 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
+  iconSelector: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  iconTypeToggle: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  iconTypeSelected: {
+    backgroundColor: '#E3F2FD',
+    borderColor: '#2196F3',
+  },
+  iconTypeText: {
+    fontWeight: '500',
+    color: '#424242',
+  },
   iconInput: {
     backgroundColor: '#FFFFFF',
     padding: 12,
@@ -164,6 +252,31 @@ const styles = StyleSheet.create({
     fontSize: 24,
     textAlign: 'center',
     width: 60,
+  },
+  iconPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginBottom: 16,
+  },
+  selectedIcon: {
+    width: 40,
+    height: 40,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  iconPickerText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#424242',
   },
   colorOptions: {
     flexDirection: 'row',
@@ -181,12 +294,17 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   listTypeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
     borderWidth: 1,
     marginRight: 8,
     marginBottom: 8,
+  },
+  listTypeIconContainer: {
+    marginRight: 6,
   },
   createButton: {
     backgroundColor: '#2196F3',

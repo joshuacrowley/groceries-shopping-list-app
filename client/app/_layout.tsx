@@ -12,6 +12,7 @@ import {
   DefaultTheme,
   Theme,
   ThemeProvider,
+  NavigationContainer
 } from "@react-navigation/native";
 import { SystemBars } from "react-native-edge-to-edge";
 
@@ -66,14 +67,14 @@ export default function RootLayout() {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ClerkLoaded>
-        <ThemeProvider
-          value={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}
+        <NavigationContainer
+          theme={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}
         >
-          <GestureHandlerRootView>
+          <GestureHandlerRootView style={{ flex: 1 }}>
             <Slot />
             <SystemBars style={"auto"} />
           </GestureHandlerRootView>
-        </ThemeProvider>
+        </NavigationContainer>
       </ClerkLoaded>
     </ClerkProvider>
   );

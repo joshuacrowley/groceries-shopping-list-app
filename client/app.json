@@ -1,5 +1,6 @@
 {
   "expo": {
+    "sdkVersion": "53.0.0",
     "name": "Shopping List",
     "slug": "groceries-shopping-list",
     "version": "1.2.2",

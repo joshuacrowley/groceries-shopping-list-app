@@ -1,0 +1,6 @@
+{
+  "amp.commands.allowlist": [
+    "rm client/app/(index)/_layout.fixed.tsx",
+    "rm client/app/\\(index\\)/_layout.fixed.tsx"
+  ]
+}
