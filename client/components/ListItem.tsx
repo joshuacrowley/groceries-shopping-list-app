@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRow } from 'tinybase/ui-react';
+import PhosphorIcon from './PhosphorIcon';
 
 const ListItem = ({ listId, onPress }) => {
   const list = useRow('lists', listId);
@@ -23,7 +24,9 @@ const ListItem = ({ listId, onPress }) => {
       style={[styles.listItem, { backgroundColor: bgColor }]}
       onPress={() => onPress(listId)}
     >
-      <Text style={styles.listIcon}>{list.icon || '📝'}</Text>
+      <View style={styles.listIcon}>
+        <PhosphorIcon name={list.icon || 'ClipboardText'} size={24} color="#212121" />
+      </View>
       <View style={styles.listInfo}>
         <Text style={styles.listName}>{list.name}</Text>
         <Text style={styles.listPurpose}>{list.purpose || 'No description'}</Text>
@@ -47,8 +50,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   listIcon: {
-    fontSize: 24,
     marginRight: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listInfo: {
     flex: 1,
