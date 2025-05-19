@@ -14,6 +14,8 @@ export const unstable_settings = {
   initialRouteName: "index",
 };
 
+import { StatusBar } from "expo-status-bar";
+
 export default function AppIndexLayout() {
   const { user } = useUser();
   const networkState = useNetworkState();
@@ -36,6 +38,7 @@ export default function AppIndexLayout() {
 
   return (
     <SignedIn>
+      <StatusBar style="auto" animated />
       <TTTStoreProvider>
         <WidgetProvider>
           <ListCreationProvider>

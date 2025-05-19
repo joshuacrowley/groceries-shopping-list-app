@@ -23,23 +23,24 @@ const DEBUG = true;
 
 function debugLog(...args) {
   if (DEBUG) {
-    console.log('[TTTStore]', ...args);
+    console.log("[TTTStore]", ...args);
   }
 }
 
 // Constants for server connection
 // Get the server URL from environment or use defaults
-let SERVER = process.env.EXPO_PUBLIC_SYNC_SERVER_URL || 
-  (process.env.NODE_ENV === "development" 
-    ? "ws://localhost:8787" 
+let SERVER =
+  process.env.EXPO_PUBLIC_SYNC_SERVER_URL ||
+  (process.env.NODE_ENV === "development"
+    ? "ws://localhost:8787"
     : "wss://worker.tinytalkingtodos.com");
 
 // Ensure URL starts with ws:// or wss://
-if (SERVER.startsWith('http://')) {
-  SERVER = SERVER.replace('http://', 'ws://');
-} else if (SERVER.startsWith('https://')) {
-  SERVER = SERVER.replace('https://', 'wss://');
-} else if (!SERVER.startsWith('ws://') && !SERVER.startsWith('wss://')) {
+if (SERVER.startsWith("http://")) {
+  SERVER = SERVER.replace("http://", "ws://");
+} else if (SERVER.startsWith("https://")) {
+  SERVER = SERVER.replace("https://", "wss://");
+} else if (!SERVER.startsWith("ws://") && !SERVER.startsWith("wss://")) {
   SERVER = `ws://${SERVER}`;
 }
 
@@ -59,24 +60,24 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     const newStore = createMergeableStore();
     newStore.setTablesSchema(SCHEMA);
     // Add initial data for a demo list if needed
-    if (!newStore.getRowIds('lists').length) {
-      const listId = 'demo-list-' + Date.now();
-      newStore.setRow('lists', listId, {
-        name: 'Getting Started',
-        purpose: 'Welcome to your todo list app!',
-        backgroundColour: 'blue',
-        icon: '🚀',
-        type: 'Info'
-      });
-      
-      // Add a sample todo
-      newStore.setRow('todos', 'demo-todo-1', {
-        list: listId,
-        text: 'Try adding a new todo',
-        done: false,
-        type: 'A'
-      });
-    }
+    // if (!newStore.getRowIds('lists').length) {
+    //   const listId = 'demo-list-' + Date.now();
+    //   newStore.setRow('lists', listId, {
+    //     name: 'Getting Started',
+    //     purpose: 'Welcome to your todo list app!',
+    //     backgroundColour: 'blue',
+    //     icon: '🚀',
+    //     type: 'Info'
+    //   });
+
+    //   // Add a sample todo
+    //   newStore.setRow('todos', 'demo-todo-1', {
+    //     list: listId,
+    //     text: 'Try adding a new todo',
+    //     done: false,
+    //     type: 'A'
+    //   });
+    // }
     return newStore;
   });
 
@@ -91,17 +92,15 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Initialize desk store
   const deskStore = useCreateStore(() =>
-    createStore()
-      .setValue("primaryList", "")
-      .setValue("listType", "All")
+    createStore().setValue("primaryList", "").setValue("listType", "All")
   );
 
   // Set up relationships
   const relationships = useCreateRelationships(store, (store) =>
     createRelationships(store).setRelationshipDefinition(
-      "todoList", 
-      "todos", 
-      "lists", 
+      "todoList",
+      "todos",
+      "lists",
       "list"
     )
   );
@@ -111,8 +110,12 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Set up organization path for synchronization
   useEffect(() => {
-    debugLog("Auth state:", { isLoaded, organizationId: organization?.id, userId: user?.id });
-    
+    debugLog("Auth state:", {
+      isLoaded,
+      organizationId: organization?.id,
+      userId: user?.id,
+    });
+
     if (isLoaded) {
       if (organization?.id) {
         const path = `/sync/${organization.id}`;
