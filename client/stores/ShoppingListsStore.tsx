@@ -31,7 +31,17 @@ const useStoreId = () => STORE_ID_PREFIX + useUser().user.id;
 export const useAddShoppingListCallback = () => {
   const store = useStore(useStoreId());
   return useCallback(
-    (name: string, description: string, emoji: string, color: string) => {
+    (
+      name: string, 
+      purpose?: string, 
+      emoji?: string, 
+      backgroundColour?: string,
+      type?: string,
+      systemPrompt?: string,
+      number?: number,
+      template?: string,
+      code?: string
+    ) => {
       const id = randomUUID();
       store.setRow("lists", id, {
         id,
@@ -40,9 +50,14 @@ export const useAddShoppingListCallback = () => {
           {
             id,
             name,
-            description,
-            emoji,
-            color,
+            purpose: purpose || "",
+            emoji: emoji || "📝",
+            backgroundColour: backgroundColour || "blue",
+            type: type || "Info",
+            systemPrompt: systemPrompt || "",
+            number: number || 0,
+            template: template || "",
+            code: code || "",
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },

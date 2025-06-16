@@ -23,7 +23,7 @@ export function WidgetProvider({ children }: { children: React.ReactNode }) {
   const recentLists = useRecentShoppingLists();
   const shoppingListIds = useShoppingListIds();
   // console.log("recentLists", recentLists.length);
-  console.log("recentLists", recentLists);
+  // console.log("recentLists", recentLists);
 
   // Update widget state whenever recentLists changes
   React.useEffect(() => {

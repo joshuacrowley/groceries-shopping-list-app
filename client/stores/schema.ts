@@ -7,16 +7,15 @@ export type Rating = typeof RATING[number];
 export type BackgroundColour = typeof BACKGROUND_COLOUR[number];
 
 export const LIST_TYPE = [
-  "Shopping",
-  "Today",
-  "Recipes",
-  "Meals",
-  "Weekend",
   "Info",
-  "General",
   "Home",
+  "Life",
+  "Food",
+  "Stuff",
+  "Fun",
   "Health",
-  "Work"
+  "Learn",
+  "Money",
 ];
 
 export const SCHEMA = {
@@ -40,14 +39,13 @@ export const SCHEMA = {
   lists: {
     name: { type: "string" },
     purpose: { type: "string" },
-    systemPrompt: { type: "string" },
+    systemPrompt: { type: "string" }, // Add this line
     backgroundColour: {
       type: "string",
       default: "blue",
       allow: BACKGROUND_COLOUR,
     },
     icon: { type: "string" },
-    iconName: { type: "string" },
     number: { type: "number" },
     template: { type: "string" },
     code: { type: "string" },

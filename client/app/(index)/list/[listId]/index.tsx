@@ -3,17 +3,22 @@ import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useRow } from 'tinybase/ui-react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TodoList from '@/Basic';
+import ShoppingListv2 from '@/templates/ShoppingListv2';
+import Today from '@/templates/Today';
+import WeeklyMealPlanner from '@/templates/WeeklyMealPlanner';
 
 export default function ListDetailScreen() {
   const { listId } = useLocalSearchParams();
   const list = useRow('lists', listId as string);
+  const insets = useSafeAreaInsets();
   
   if (!list) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          <Pressable onPress={() => router.push('/(index)')} style={styles.backButton}>
             <Feather name="arrow-left" size={24} color="#2196F3" />
           </Pressable>
           <Text style={styles.title}>List not found</Text>
@@ -31,10 +36,27 @@ export default function ListDetailScreen() {
     );
   }
 
+  // Template-based rendering
+  const renderListTemplate = () => {
+    const template = list.template;
+    
+    switch (template) {
+      case 'ShoppingListv2':
+        return <ShoppingListv2 listId={listId as string} />;
+      case 'Today':
+        return <Today listId={listId as string} />;
+      case 'WeeklyMealPlanner':
+        return <WeeklyMealPlanner listId={listId as string} />;
+      default:
+        // Fallback to default TodoList for unrecognized templates
+        return <TodoList listId={listId as string} />;
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+        <Pressable onPress={() => router.push('/(index)')} style={styles.backButton}>
           <Feather name="arrow-left" size={24} color="#2196F3" />
         </Pressable>
         <Text style={styles.title}>{list.name}</Text>
@@ -43,7 +65,7 @@ export default function ListDetailScreen() {
         </Pressable>
       </View>
       
-      <TodoList listId={listId as string} />
+      {renderListTemplate()}
     </View>
   );
 }
@@ -54,7 +76,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   header: {
-    paddingTop: 20,
     paddingHorizontal: 16,
     paddingBottom: 8,
     flexDirection: 'row',

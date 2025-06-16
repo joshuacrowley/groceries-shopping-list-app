@@ -6,16 +6,21 @@ import { ThemedText } from "@/components/ThemedText";
 import { BodyScrollView } from "@/components/ui/BodyScrollView";
 import Button from "@/components/ui/button";
 import TextInput from "@/components/ui/text-input";
-import { isClerkAPIResponseError, useSignIn } from "@clerk/clerk-expo";
+import { isClerkAPIResponseError, useSignIn, useOAuth } from "@clerk/clerk-expo";
 import { ClerkAPIError } from "@clerk/types";
+import * as WebBrowser from "expo-web-browser";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function SignIn() {
   const { signIn, setActive, isLoaded } = useSignIn();
+  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
   const router = useRouter();
 
   const [emailAddress, setEmailAddress] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [isSigningIn, setIsSigningIn] = React.useState(false);
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = React.useState(false);
   const [errors, setErrors] = React.useState<ClerkAPIError[]>([]);
   // Handle the submission of the sign-in form
   const onSignInPress = React.useCallback(async () => {
@@ -52,6 +57,27 @@ export default function SignIn() {
       setIsSigningIn(false);
     }
   }, [isLoaded, emailAddress, password]);
+
+  const onGoogleSignInPress = React.useCallback(async () => {
+    if (process.env.EXPO_OS === "ios") {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setIsGoogleSigningIn(true);
+    
+    try {
+      const { createdSessionId, setActive } = await startOAuthFlow();
+      
+      if (createdSessionId) {
+        await setActive!({ session: createdSessionId });
+        router.replace("/(index)");
+      }
+    } catch (err) {
+      if (isClerkAPIResponseError(err)) setErrors(err.errors);
+      console.error("Google OAuth error:", JSON.stringify(err, null, 2));
+    } finally {
+      setIsGoogleSigningIn(false);
+    }
+  }, [startOAuthFlow, router]);
 
   const onNavigatePress = React.useCallback(
     async (path: Href) => {
@@ -92,6 +118,19 @@ export default function SignIn() {
       >
         Sign in
       </Button>
+      
+      <View style={{ marginTop: 16, alignItems: "center" }}>
+        <ThemedText style={{ marginBottom: 12, color: '#666' }}>Or continue with</ThemedText>
+        <Button
+          onPress={onGoogleSignInPress}
+          loading={isGoogleSigningIn}
+          disabled={isGoogleSigningIn || isSigningIn}
+          variant="outline"
+          style={{ width: '100%' }}
+        >
+          {isGoogleSigningIn ? 'Signing in...' : 'Continue with Google'}
+        </Button>
+      </View>
       <View style={{ marginTop: 16, alignItems: "center" }}>
         <ThemedText>Don't have an account?</ThemedText>
         <Button onPress={() => onNavigatePress("/sign-up")} variant="ghost">

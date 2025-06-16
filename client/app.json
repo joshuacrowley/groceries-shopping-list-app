@@ -5,7 +5,7 @@
     "slug": "tiny-talking-todos",
     "version": "0.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/adaptive-icon.png",
     "scheme": "tinytalkingtodos",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,7 +14,7 @@
       "bundleIdentifier": "com.joshuacrowley.tinytalkingtodos",
       "appleTeamId": "L58BK45YGQ",
       "icon": {
-        "light": "./assets/images/icon.png",
+        "light": "./assets/images/adaptive-icon.png",
         "dark": "./assets/images/icon-dark.png",
         "tinted": "./assets/images/icon-tinted.png"
       },
@@ -41,7 +41,7 @@
     "web": {
       "bundler": "metro",
       "output": "server",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/adaptive-icon.png"
     },
     "plugins": [
       "expo-router",

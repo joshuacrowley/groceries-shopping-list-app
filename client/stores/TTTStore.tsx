@@ -213,7 +213,7 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         return null;
       }
     },
-    [isInitialized, serverPath, getToken, organization?.id]
+    [isInitialized, serverPath, organization?.id]
   );
 
   return (
