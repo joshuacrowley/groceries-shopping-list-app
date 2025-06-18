@@ -1,5 +1,14 @@
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  TextInput,
+  Alert,
+} from "react-native";
+import {
   useStore,
   useLocalRowIds,
   useRow,
@@ -8,22 +17,6 @@ import {
   useAddRowCallback,
   useTable,
 } from "tinybase/ui-react";
-import {
-  Box,
-  VStack,
-  HStack,
-  Input,
-  Button,
-  Text,
-  IconButton,
-  useColorModeValue,
-  Select,
-  Badge,
-  Collapse,
-  useDisclosure,
-  Divider,
-} from "@chakra-ui/react";
-import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
   Trash,
   Basketball,
@@ -37,7 +30,7 @@ import {
   Sunglasses,
   SunDim,
   SunHorizon,
-} from "@phosphor-icons/react";
+} from "phosphor-react-native";
 
 const DAYS = ["Saturday", "Sunday"];
 const TIME_PERIODS = ["Morning", "Afternoon"];
@@ -51,8 +44,12 @@ const CATEGORIES = {
   F: { name: "None", icon: Question },
 };
 
-const ActivityItem = ({ id }: { id: string }) => {
-  const { isOpen, onToggle } = useDisclosure();
+interface ActivityItemProps {
+  id: string;
+}
+
+const ActivityItem: React.FC<ActivityItemProps> = ({ id }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const activityData = useRow("todos", id);
   
   const updateActivity = useSetRowCallback(
@@ -69,145 +66,173 @@ const ActivityItem = ({ id }: { id: string }) => {
   const deleteActivity = useDelRowCallback("todos", id);
 
   const Icon = activityData?.type ? CATEGORIES[activityData.type as keyof typeof CATEGORIES]?.icon : Question;
-  const bgColor = useColorModeValue("white", "yellow.700");
-  const textColor = useColorModeValue("yellow.800", "white");
 
   if (!activityData) return null;
 
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Activity",
+      "Are you sure you want to delete this activity?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: deleteActivity },
+      ]
+    );
+  };
+
   return (
-    <Reorder.Item value={id} as="div">
-      <Box
-        width="100%"
-        bg={bgColor}
-        p={3}
-        borderRadius="md"
-        boxShadow="sm"
-        cursor="grab"
-      >
-        <HStack justifyContent="space-between">
-          <HStack spacing={3}>
-            <Icon size={20} />
-            <VStack align="start" spacing={0}>
-              <Text fontWeight="bold" color={textColor}>
-                {activityData.text}
+    <View style={styles.activityItem}>
+      <View style={styles.activityHeader}>
+        <View style={styles.activityInfo}>
+          <Icon size={20} color="#B7791F" />
+          <View style={styles.activityText}>
+            <Text style={styles.activityTitle}>
+              {activityData.text}
+            </Text>
+            {activityData.notes && (
+              <Text style={styles.activityNotes}>
+                {activityData.notes}
               </Text>
-              <Text fontSize="sm" color={textColor} opacity={0.8}>
-                {activityData.notes || ""}
-              </Text>
-            </VStack>
-          </HStack>
-          <HStack>
-            <Badge colorScheme="yellow">
+            )}
+          </View>
+        </View>
+        <View style={styles.activityActions}>
+          <View style={styles.timeBadge}>
+            <Text style={styles.timeBadgeText}>
               {activityData.number || 0}:00
-            </Badge>
-            <IconButton
-              icon={isOpen ? <CaretUp /> : <CaretDown />}
-              onClick={onToggle}
-              aria-label="Toggle details"
-              size="sm"
-              variant="ghost"
-            />
-            <IconButton
-              icon={<Trash />}
-              onClick={deleteActivity}
-              aria-label="Delete activity"
-              size="sm"
-              colorScheme="red"
-              variant="ghost"
-            />
-          </HStack>
-        </HStack>
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => setIsExpanded(!isExpanded)}
+            style={styles.iconButton}
+          >
+            {isExpanded ? (
+              <CaretUp size={16} color="#B7791F" />
+            ) : (
+              <CaretDown size={16} color="#B7791F" />
+            )}
+          </Pressable>
+          <Pressable onPress={handleDelete} style={styles.iconButton}>
+            <Trash size={16} color="#DC2626" />
+          </Pressable>
+        </View>
+      </View>
 
-        <Collapse in={isOpen} animateOpacity>
-          <VStack align="stretch" mt={3} spacing={3}>
-            <HStack>
-              <Select
-                value={activityData.category as string || "Saturday"}
-                onChange={(e) => updateActivity({ category: e.target.value })}
-                size="sm"
-                bg="white"
-              >
-                {DAYS.map((day) => (
-                  <option key={day} value={day}>
+      {isExpanded && (
+        <View style={styles.activityDetails}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Day:</Text>
+            <View style={styles.selectContainer}>
+              {DAYS.map((day) => (
+                <Pressable
+                  key={day}
+                  onPress={() => updateActivity({ category: day })}
+                  style={[
+                    styles.selectOption,
+                    (activityData.category as string) === day && styles.selectOptionSelected
+                  ]}
+                >
+                  <Text style={[
+                    styles.selectOptionText,
+                    (activityData.category as string) === day && styles.selectOptionTextSelected
+                  ]}>
                     {day}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                value={activityData.type as string || "F"}
-                onChange={(e) => updateActivity({ type: e.target.value })}
-                size="sm"
-                bg="white"
-              >
-                {Object.entries(CATEGORIES).map(([key, { name }]) => (
-                  <option key={key} value={key}>
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Type:</Text>
+            <View style={styles.selectContainer}>
+              {Object.entries(CATEGORIES).map(([key, { name }]) => (
+                <Pressable
+                  key={key}
+                  onPress={() => updateActivity({ type: key })}
+                  style={[
+                    styles.selectOption,
+                    (activityData.type as string) === key && styles.selectOptionSelected
+                  ]}
+                >
+                  <Text style={[
+                    styles.selectOptionText,
+                    (activityData.type as string) === key && styles.selectOptionTextSelected
+                  ]}>
                     {name}
-                  </option>
-                ))}
-              </Select>
-            </HStack>
-            <HStack>
-              <Text width="60px" fontSize="sm">Time:</Text>
-              <Select
-                value={String(activityData.number || 0)}
-                onChange={(e) => updateActivity({ number: parseInt(e.target.value, 10) })}
-                size="sm"
-                bg="white"
-              >
-                {Array.from({ length: 24 }, (_, i) => (
-                  <option key={i} value={i}>
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Time:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timeScroll}>
+              {Array.from({ length: 24 }, (_, i) => (
+                <Pressable
+                  key={i}
+                  onPress={() => updateActivity({ number: i })}
+                  style={[
+                    styles.timeOption,
+                    Number(activityData.number) === i && styles.timeOptionSelected
+                  ]}
+                >
+                  <Text style={[
+                    styles.timeOptionText,
+                    Number(activityData.number) === i && styles.timeOptionTextSelected
+                  ]}>
                     {i}:00
-                  </option>
-                ))}
-              </Select>
-            </HStack>
-            <Input
-              value={activityData.notes as string || ""}
-              onChange={(e) => updateActivity({ notes: e.target.value })}
-              placeholder="Add notes..."
-              size="sm"
-              bg="white"
-            />
-          </VStack>
-        </Collapse>
-      </Box>
-    </Reorder.Item>
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+
+          <TextInput
+            value={(activityData.notes as string) || ""}
+            onChangeText={(text) => updateActivity({ notes: text })}
+            placeholder="Add notes..."
+            style={styles.notesInput}
+            multiline
+          />
+        </View>
+      )}
+    </View>
   );
 };
 
-const TimeBlock = ({ day, period, activities, onReorder }) => {
-  const textColor = useColorModeValue("yellow.800", "yellow.100");
+interface TimeBlockProps {
+  day: string;
+  period: string;
+  activities: string[];
+}
 
+const TimeBlock: React.FC<TimeBlockProps> = ({ day, period, activities }) => {
   return (
-    <Box mb={4}>
-      <HStack mb={2}>
+    <View style={styles.timeBlock}>
+      <View style={styles.timeBlockHeader}>
         {period === "Morning" ? (
-          <SunDim size={20} weight="fill" />
+          <SunDim size={20} color="#B7791F" weight="fill" />
         ) : (
-          <SunHorizon size={20} weight="fill" />
+          <SunHorizon size={20} color="#B7791F" weight="fill" />
         )}
-        <Text fontSize="lg" fontWeight="medium" color={textColor}>
-          {period}
-        </Text>
-      </HStack>
-      <Reorder.Group 
-        axis="y" 
-        values={activities} 
-        onReorder={onReorder}
-      >
-        <VStack align="stretch" spacing={2}>
-          <AnimatePresence>
-            {activities.map((id) => (
-              <ActivityItem key={id} id={id} />
-            ))}
-          </AnimatePresence>
-        </VStack>
-      </Reorder.Group>
-    </Box>
+        <Text style={styles.timeBlockTitle}>{period}</Text>
+      </View>
+      <View style={styles.activitiesContainer}>
+        {activities.map((id) => (
+          <ActivityItem key={id} id={id} />
+        ))}
+      </View>
+    </View>
   );
 };
 
-const WeekendPlanner = ({ listId = "weekend-planner" }) => {
+interface WeekendPlannerProps {
+  listId: string;
+}
+
+const WeekendPlanner: React.FC<WeekendPlannerProps> = ({ listId }) => {
   const [newActivity, setNewActivity] = useState({
     text: "",
     notes: "",
@@ -235,7 +260,6 @@ const WeekendPlanner = ({ listId = "weekend-planner" }) => {
       }
 
       grouped[day][period].push(id);
-      // Sort by time
       grouped[day][period].sort((a, b) => {
         const timeA = Number(todosTable?.[a]?.number) || 0;
         const timeB = Number(todosTable?.[b]?.number) || 0;
@@ -245,23 +269,6 @@ const WeekendPlanner = ({ listId = "weekend-planner" }) => {
       return grouped;
     }, DAYS.reduce((acc, day) => ({ ...acc, [day]: { Morning: [], Afternoon: [] } }), {}));
   }, [todoIds, todosTable]);
-
-  useEffect(() => {
-    console.log('Weekend planner distribution updated:', {
-      listId,
-      groupedActivities,
-      allActivities: todosTable,
-      relationshipIds: todoIds
-    });
-  }, [groupedActivities, listId, todosTable, todoIds]);
-
-  const handleReorder = useCallback((day, period, newOrder) => {
-    const updateOrder = {};
-    newOrder.forEach((id, index) => {
-      updateOrder[index] = id;
-    });
-    store.setTable("todoList", { [listId]: updateOrder });
-  }, [store, listId]);
 
   const addActivity = useAddRowCallback(
     "todos",
@@ -280,80 +287,330 @@ const WeekendPlanner = ({ listId = "weekend-planner" }) => {
   const handleAddActivity = useCallback(() => {
     if (newActivity.text.trim()) {
       addActivity(newActivity);
+      setNewActivity({
+        text: "",
+        notes: "",
+        type: "F",
+        category: "Saturday",
+        number: 9,
+      });
     }
   }, [addActivity, newActivity]);
 
-  const bgColor = useColorModeValue("yellow.50", "yellow.900");
-  const textColor = useColorModeValue("yellow.800", "yellow.100");
-
   return (
-    <Box
-      maxWidth="800px"
-      margin="auto"
-      p={5}
-      bg={bgColor}
-      borderRadius="lg"
-      boxShadow="lg"
-    >
-      <VStack spacing={4} align="stretch">
-        <HStack justifyContent="space-between">
-          <HStack>
-            <Sunglasses size={32} weight="fill" />
-            <Text fontSize="2xl" fontWeight="bold" color={textColor}>
+    <ScrollView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Sunglasses size={32} color="#B7791F" weight="fill" />
+            <Text style={styles.title}>
               {listData?.name || "Weekend Planner"}
             </Text>
-          </HStack>
-          <Badge colorScheme="yellow" p={2} borderRadius="md">
-            {todoIds.length} Activities
-          </Badge>
-        </HStack>
+          </View>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>
+              {todoIds.length} Activities
+            </Text>
+          </View>
+        </View>
 
-        <HStack spacing={3}>
-          <Input
+        <View style={styles.addActivityContainer}>
+          <TextInput
             value={newActivity.text}
-            onChange={(e) => setNewActivity({ ...newActivity, text: e.target.value })}
+            onChangeText={(text) => setNewActivity({ ...newActivity, text })}
             placeholder="Add new activity"
-            bg="white"
+            style={styles.addActivityInput}
           />
-          <Select
-            value={newActivity.type}
-            onChange={(e) => setNewActivity({ ...newActivity, type: e.target.value })}
-            width="150px"
-            bg="white"
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
             {Object.entries(CATEGORIES).map(([key, { name }]) => (
-              <option key={key} value={key}>
-                {name}
-              </option>
+              <Pressable
+                key={key}
+                onPress={() => setNewActivity({ ...newActivity, type: key })}
+                style={[
+                  styles.categoryOption,
+                  newActivity.type === key && styles.categoryOptionSelected
+                ]}
+              >
+                <Text style={[
+                  styles.categoryOptionText,
+                  newActivity.type === key && styles.categoryOptionTextSelected
+                ]}>
+                  {name}
+                </Text>
+              </Pressable>
             ))}
-          </Select>
-          <Button onClick={handleAddActivity} colorScheme="yellow">
-            Add
-          </Button>
-        </HStack>
+          </ScrollView>
+          <Pressable onPress={handleAddActivity} style={styles.addButton}>
+            <Text style={styles.addButtonText}>Add</Text>
+          </Pressable>
+        </View>
 
         {DAYS.map((day) => (
-          <Box key={day}>
-            <Text fontSize="xl" fontWeight="bold" color={textColor} mb={4}>
-              {day}
-            </Text>
+          <View key={day} style={styles.daySection}>
+            <Text style={styles.dayTitle}>{day}</Text>
             {TIME_PERIODS.map((period) => (
-              <React.Fragment key={`${day}-${period}`}>
-                <TimeBlock
-                  day={day}
-                  period={period}
-                  activities={groupedActivities[day]?.[period] || []}
-                  onReorder={(newOrder) => handleReorder(day, period, newOrder)}
-                />
-                {period === "Morning" && <Divider my={4} borderColor="yellow.200" />}
-              </React.Fragment>
+              <TimeBlock
+                key={`${day}-${period}`}
+                day={day}
+                period={period}
+                activities={groupedActivities[day]?.[period] || []}
+              />
             ))}
-            {day === "Saturday" && <Divider my={6} borderColor="yellow.200" />}
-          </Box>
+            {day === "Saturday" && <View style={styles.daySeparator} />}
+          </View>
         ))}
-      </VStack>
-    </Box>
+      </View>
+    </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFBEB",
+  },
+  content: {
+    padding: 16,
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#B7791F",
+    marginLeft: 12,
+  },
+  badge: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#F3E8FF",
+  },
+  badgeText: {
+    color: "#B7791F",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  addActivityContainer: {
+    marginBottom: 24,
+  },
+  addActivityInput: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#F3E8FF",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  categoryScroll: {
+    marginBottom: 8,
+  },
+  categoryOption: {
+    backgroundColor: "white",
+    borderWidth: 1,
+    borderColor: "#F3E8FF",
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  categoryOptionSelected: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#B7791F",
+  },
+  categoryOptionText: {
+    color: "#6B7280",
+    fontSize: 14,
+  },
+  categoryOptionTextSelected: {
+    color: "#B7791F",
+    fontWeight: "600",
+  },
+  addButton: {
+    backgroundColor: "#F59E0B",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  addButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  daySection: {
+    marginBottom: 24,
+  },
+  dayTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#B7791F",
+    marginBottom: 16,
+  },
+  daySeparator: {
+    height: 1,
+    backgroundColor: "#FEF3C7",
+    marginVertical: 24,
+  },
+  timeBlock: {
+    marginBottom: 16,
+  },
+  timeBlockHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  timeBlockTitle: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#B7791F",
+    marginLeft: 8,
+  },
+  activitiesContainer: {
+    gap: 8,
+  },
+  activityItem: {
+    backgroundColor: "white",
+    borderRadius: 8,
+    padding: 12,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  activityHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  activityInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  activityText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#B7791F",
+  },
+  activityNotes: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  activityActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  timeBadge: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  timeBadgeText: {
+    color: "#B7791F",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  iconButton: {
+    padding: 4,
+  },
+  activityDetails: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  detailRow: {
+    marginBottom: 12,
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 6,
+  },
+  selectContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  selectOption: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  selectOptionSelected: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#B7791F",
+  },
+  selectOptionText: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  selectOptionTextSelected: {
+    color: "#B7791F",
+    fontWeight: "600",
+  },
+  timeScroll: {
+    maxHeight: 40,
+  },
+  timeOption: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 6,
+    minWidth: 50,
+    alignItems: "center",
+  },
+  timeOptionSelected: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#B7791F",
+  },
+  timeOptionText: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  timeOptionTextSelected: {
+    color: "#B7791F",
+    fontWeight: "600",
+  },
+  notesInput: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 6,
+    padding: 8,
+    fontSize: 14,
+    minHeight: 60,
+    textAlignVertical: "top",
+  },
+});
 
 export default WeekendPlanner;

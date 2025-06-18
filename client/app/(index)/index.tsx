@@ -41,9 +41,6 @@ export default function HomeScreen() {
     router.push(`/(index)/list/${listId}`);
   };
   
-  const goToListsScreen = () => {
-    router.push('/(index)/lists');
-  };
 
   const handleSignOut = async () => {
     try {
@@ -78,9 +75,6 @@ export default function HomeScreen() {
       <View style={styles.orgHeader}>
         <Text style={styles.orgName}>{organization?.name || 'My Lists'}</Text>
         <View style={styles.headerButtons}>
-          <Pressable onPress={goToListsScreen} style={styles.navButton}>
-            <Text style={styles.navButtonText}>All Lists</Text>
-          </Pressable>
           {isSignedIn ? (
             <>
               <Pressable onPress={handleProfile} style={styles.profileButton}>

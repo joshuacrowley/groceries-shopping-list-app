@@ -8,6 +8,10 @@ import TodoList from '@/Basic';
 import ShoppingListv2 from '@/templates/ShoppingListv2';
 import Today from '@/templates/Today';
 import WeeklyMealPlanner from '@/templates/WeeklyMealPlanner';
+import WeekendPlanner from '@/templates/WeekendPlanner';
+import Recipes from '@/templates/Recipes';
+import RecipeCard from '@/templates/RecipeCard';
+import PhotoUploader from '@/components/PhotoUploader';
 
 export default function ListDetailScreen() {
   const { listId } = useLocalSearchParams();
@@ -47,6 +51,12 @@ export default function ListDetailScreen() {
         return <Today listId={listId as string} />;
       case 'WeeklyMealPlanner':
         return <WeeklyMealPlanner listId={listId as string} />;
+      case 'WeekendPlanner':
+        return <WeekendPlanner listId={listId as string} />;
+      case 'Recipes':
+        return <Recipes listId={listId as string} />;
+      case 'RecipeCard':
+        return <RecipeCard listId={listId as string} />;
       default:
         // Fallback to default TodoList for unrecognized templates
         return <TodoList listId={listId as string} />;
@@ -60,6 +70,7 @@ export default function ListDetailScreen() {
           <Feather name="arrow-left" size={24} color="#2196F3" />
         </Pressable>
         <Text style={styles.title}>{list.name}</Text>
+        <PhotoUploader listId={listId as string} />
         <Pressable style={styles.menuButton}>
           <Feather name="more-vertical" size={24} color="#757575" />
         </Pressable>

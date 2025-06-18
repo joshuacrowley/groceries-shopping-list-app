@@ -8,7 +8,6 @@ import { ListCreationProvider } from "@/context/ListCreationContext";
 import { SignedIn, useUser } from "@clerk/clerk-expo";
 import { WidgetProvider } from "@/contexts/WidgetContext";
 import TTTStoreProvider from "@/stores/TTTStore";
-import DebugInfo from "@/components/DebugInfo";
 
 export const unstable_settings = {
   initialRouteName: "index",
@@ -188,7 +187,6 @@ export default function AppIndexLayout() {
           </ListCreationProvider>
 
           {process.env.EXPO_OS === "web" ? <Inspector /> : null}
-          <DebugInfo />
         </WidgetProvider>
       </TTTStoreProvider>
     </SignedIn>
