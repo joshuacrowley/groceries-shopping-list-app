@@ -3,7 +3,7 @@ import { randomUUID } from "expo-crypto";
 import * as UiReact from "tinybase/ui-react/with-schemas";
 import { createMergeableStore, NoValuesSchema } from "tinybase/with-schemas";
 import { useCreateClientPersisterAndStart } from "@/stores/persistence/useCreateClientPersisterAndStart";
-import { useUser } from "@clerk/clerk-expo";
+import { useOrganization, useUser } from "@clerk/clerk-expo";
 import ShoppingListStore from "./ShoppingListStore";
 import { useCreateServerSynchronizerAndStart } from "./synchronization/useCreateServerSynchronizerAndStart";
 
@@ -25,7 +25,16 @@ const {
   useTable,
 } = UiReact as UiReact.WithSchemas<[typeof TABLES_SCHEMA, NoValuesSchema]>;
 
-const useStoreId = () => STORE_ID_PREFIX + useUser().user.id;
+const useStoreId = () => {
+  const { user } = useUser();
+  const { organization } = useOrganization();
+  
+  if (!organization?.id) {
+    throw new Error("Organization required for shopping lists");
+  }
+  
+  return STORE_ID_PREFIX + organization.id + "-" + user.id;
+};
 
 // Returns a callback that adds a new shopping list to the store.
 export const useAddShoppingListCallback = () => {

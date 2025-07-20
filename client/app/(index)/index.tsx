@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAre
 import { useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useStore, useRowIds } from 'tinybase/ui-react';
+import { useStore, useRowIds, useAddRowCallback } from 'tinybase/ui-react';
 import { useOrganization, useAuth, useUser, useClerk } from '@clerk/clerk-expo';
 import TodoList from '@/Basic';
 import ListItem from '@/components/ListItem';
@@ -20,6 +20,23 @@ export default function HomeScreen() {
   const store = useStore();
   const listIds = useRowIds('lists') || [];
   
+  const addList = useAddRowCallback(
+    'lists',
+    () => ({
+      name: "New List",
+      purpose: "A simple, flexible todo list for all your tasks and ideas",
+      icon: '',
+      iconName: 'ListChecks',
+      backgroundColour: 'blue',
+      type: 'Home',
+      systemPrompt: '',
+      template: 'Basic',
+      code: '',
+      number: 117,
+    }),
+    []
+  );
+  
   // Set loading state
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -34,7 +51,8 @@ export default function HomeScreen() {
   };
 
   const handleCreateList = () => {
-    router.push('/(index)/list/new');
+    const listId = addList();
+    router.push(`/(index)/list/${listId}`);
   };
   
   const handleListPress = (listId) => {

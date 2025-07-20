@@ -9,6 +9,7 @@ import {
   Value,
 } from "tinybase/with-schemas";
 import { useUserIdAndNickname } from "@/hooks/useNickname";
+import { useOrganization } from "@clerk/clerk-expo";
 import { useCreateClientPersisterAndStart } from "@/stores/persistence/useCreateClientPersisterAndStart";
 import { useCreateServerSynchronizerAndStart } from "./synchronization/useCreateServerSynchronizerAndStart";
 import { SCHEMA, BACKGROUND_COLOUR, LIST_TYPE } from "./schema";
@@ -58,7 +59,15 @@ const {
   useValue,
 } = UiReact as UiReact.WithSchemas<Schemas>;
 
-const useStoreId = (listId: string) => STORE_ID_PREFIX + listId;
+const useStoreId = (listId: string) => {
+  const { organization } = useOrganization();
+  
+  if (!organization?.id) {
+    throw new Error("Organization required for shopping lists");
+  }
+  
+  return STORE_ID_PREFIX + organization.id + "-" + listId;
+};
 
 // Update the useAddShoppingListProductCallback to use new schema fields
 export const useAddShoppingListProductCallback = (listId: string) => {

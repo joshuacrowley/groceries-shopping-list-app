@@ -59,6 +59,7 @@ export default function AppIndexLayout() {
                 tabBarStyle: { display: "none" }, // Hide the tab bar
               }}
             >
+              {/* Hidden: List creation form
               <Tabs.Screen
                 name="list/new/index"
                 options={{
@@ -68,6 +69,7 @@ export default function AppIndexLayout() {
                   href: null,
                 }}
               />
+              */}
               <Tabs.Screen
                 name="list/[listId]/index"
                 options={{
@@ -97,6 +99,7 @@ export default function AppIndexLayout() {
                   href: null,
                 }}
               />
+              {/* Hidden: Scan QR for new list
               <Tabs.Screen
                 name="list/new/scan"
                 options={{
@@ -111,6 +114,7 @@ export default function AppIndexLayout() {
                   href: null,
                 }}
               />
+              */}
               <Tabs.Screen
                 name="list/[listId]/product/[productId]"
                 options={{
