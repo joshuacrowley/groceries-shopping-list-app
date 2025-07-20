@@ -3,14 +3,16 @@ import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAre
 import { useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useStore, useRowIds, useAddRowCallback } from 'tinybase/ui-react';
+import { useStore, useRowIds, useAddRowCallback, useRow } from 'tinybase/ui-react';
 import { useOrganization, useAuth, useUser, useClerk } from '@clerk/clerk-expo';
 import TodoList from '@/Basic';
 import ListItem from '@/components/ListItem';
+import VoiceModal from '@/components/VoiceModal';
 
 export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedListId, setSelectedListId] = useState(null);
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const { organization } = useOrganization();
   const { isSignedIn } = useAuth();
   const { user } = useUser();
@@ -19,6 +21,32 @@ export default function HomeScreen() {
   // Get lists from the store
   const store = useStore();
   const listIds = useRowIds('lists') || [];
+  
+  // Get all todos and lists for voice context
+  const allLists = {};
+  const allTodos = {};
+  
+  // Build lists data
+  listIds.forEach(listId => {
+    const listData = store?.getRow('lists', listId);
+    if (listData) {
+      allLists[listId] = listData;
+    }
+  });
+  
+  // Build todos data - get all todos from all stores
+  const todoIds = store?.getRowIds('todos') || [];
+  todoIds.forEach(todoId => {
+    const todoData = store?.getRow('todos', todoId);
+    if (todoData) {
+      allTodos[todoId] = todoData;
+    }
+  });
+  
+  const contextData = {
+    lists: allLists,
+    todos: allTodos,
+  };
   
   const addList = useAddRowCallback(
     'lists',
@@ -144,6 +172,21 @@ export default function HomeScreen() {
           }
         />
       )}
+      
+      {/* Floating Voice Button */}
+      <Pressable
+        style={styles.floatingVoiceButton}
+        onPress={() => setVoiceModalVisible(true)}
+      >
+        <Feather name="mic" size={24} color="#FFFFFF" />
+      </Pressable>
+      
+      {/* Voice Modal */}
+      <VoiceModal
+        visible={voiceModalVisible}
+        onClose={() => setVoiceModalVisible(false)}
+        contextData={contextData}
+      />
     </SafeAreaView>
   );
 }
@@ -334,5 +377,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
     letterSpacing: 0.5,
+  },
+  floatingVoiceButton: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });
