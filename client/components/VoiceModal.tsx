@@ -17,6 +17,7 @@ import { router } from 'expo-router';
 import VoiceRecordingButton from './VoiceRecordingButton';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import Constants from 'expo-constants';
+import { createChatContextGenerator } from '../app/api/chatContext';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -124,7 +125,7 @@ const callGeminiVoiceAPI = async (
   } as any; // Type assertion to bypass strict typing while using structured output
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro",
+    model: "gemini-2.5-flash",
     generationConfig: {
       temperature: 0.7,
       topK: 40,
@@ -153,24 +154,25 @@ const callGeminiVoiceAPI = async (
     ],
   });
 
-  // Prepare context information
-  const listsInfo = Object.entries(contextData?.lists || {}).map(([id, list]: [string, any]) => ({
-    id,
-    name: list.name,
-    type: list.type,
-    itemCount: Object.values(contextData?.todos || {}).filter((todo: any) => todo.list === id).length
-  }));
+  // Prepare context information using XML format
+  const contextGenerator = createChatContextGenerator({
+    lists: contextData?.lists || {},
+    todos: contextData?.todos || {}
+  });
+  
+  const xmlContext = contextGenerator.getSystemMessage();
 
   // No need to specify JSON format in the prompt - structured output handles it
   const prompt = `You are a helpful shopping list assistant. Analyze the user's voice command and respond appropriately.
 
-Available lists:
-${listsInfo.map(list => `- "${list.name}" (ID: ${list.id}, Type: ${list.type}, ${list.itemCount} items)`).join('\n')}
+Here is the current state of lists and their items:
+${xmlContext}
 
 Instructions:
 - Provide a natural, conversational response message
 - If the user wants to navigate or view a list, include an action with the list ID
 - If the user asks about items or contents, suggest showing the relevant list
+- If the user asks about specific items, you can see them in the <todo> elements within each list
 - Always use the exact list ID from the available lists above
 - Be helpful and friendly in your response`;
 
