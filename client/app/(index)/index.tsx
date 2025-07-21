@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAreaView } from 'react-native';
+import React, { useEffect, useState, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAreaView, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,11 +8,14 @@ import { useOrganization, useAuth, useUser, useClerk } from '@clerk/clerk-expo';
 import TodoList from '@/Basic';
 import ListItem from '@/components/ListItem';
 import VoiceModal from '@/components/VoiceModal';
+import { LIST_TYPE } from '@/stores/schema';
 
 export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedListId, setSelectedListId] = useState(null);
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState<string>('All');
+  const [sortBy, setSortBy] = useState<'name' | 'todos'>('name');
   const { organization } = useOrganization();
   const { isSignedIn } = useAuth();
   const { user } = useUser();
@@ -47,6 +50,40 @@ export default function HomeScreen() {
     lists: allLists,
     todos: allTodos,
   };
+
+  // Filter and sort lists
+  const filteredAndSortedLists = useMemo(() => {
+    let filtered = listIds.filter(listId => {
+      const listData = store?.getRow('lists', listId);
+      if (!listData || listData.type === 'Offload') return false;
+      
+      if (selectedTopic === 'All') return true;
+      return listData.type === selectedTopic;
+    });
+
+    // Sort lists
+    filtered.sort((a, b) => {
+      const listA = store?.getRow('lists', a);
+      const listB = store?.getRow('lists', b);
+      
+      if (!listA || !listB) return 0;
+      
+      if (sortBy === 'name') {
+        return listA.name.localeCompare(listB.name);
+      } else {
+        // Sort by todo count - get todos for each list
+        const todosA = store?.getRowIds('todos')?.filter(todoId => 
+          store?.getRow('todos', todoId)?.list === a
+        )?.length || 0;
+        const todosB = store?.getRowIds('todos')?.filter(todoId => 
+          store?.getRow('todos', todoId)?.list === b
+        )?.length || 0;
+        return todosB - todosA; // Descending order
+      }
+    });
+
+    return filtered;
+  }, [listIds, selectedTopic, sortBy, store]);
   
   const addList = useAddRowCallback(
     'lists',
@@ -118,20 +155,15 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.orgHeader}>
         <Text style={styles.orgName}>{organization?.name || 'My Lists'}</Text>
         <View style={styles.headerButtons}>
           {isSignedIn ? (
-            <>
-              <Pressable onPress={handleProfile} style={styles.profileButton}>
-                <Feather name="user" size={16} color="#059669" />
-                <Text style={styles.profileButtonText}>Profile</Text>
-              </Pressable>
-              <Pressable onPress={handleSignOut} style={styles.signOutButton}>
-                <Feather name="log-out" size={16} color="#DC2626" />
-                <Text style={styles.signOutButtonText}>Sign Out</Text>
-              </Pressable>
-            </>
+            <Pressable onPress={handleProfile} style={styles.profileButton}>
+              <Feather name="user" size={16} color="#059669" />
+              <Text style={styles.profileButtonText}>Profile</Text>
+            </Pressable>
           ) : (
             <Pressable onPress={handleSignIn} style={styles.signInButton}>
               <Feather name="log-in" size={16} color="#2563EB" />
@@ -140,7 +172,61 @@ export default function HomeScreen() {
           )}
         </View>
       </View>
+
+      {/* Primary Voice Interface */}
+      <View style={styles.voiceSection}>
+        <Pressable
+          style={styles.primaryVoiceButton}
+          onPress={() => setVoiceModalVisible(true)}
+        >
+          <Feather name="mic" size={32} color="#FFFFFF" />
+          <Text style={styles.voiceButtonText}>Ask me anything</Text>
+        </Pressable>
+      </View>
+
+      {/* Topic Filters */}
+      <View style={styles.filtersSection}>
+        <Text style={styles.filtersTitle}>Topics</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.topicFilters}
+        >
+          <Pressable 
+            style={[styles.topicChip, selectedTopic === 'All' && styles.topicChipActive]}
+            onPress={() => setSelectedTopic('All')}
+          >
+            <Text style={[styles.topicText, selectedTopic === 'All' && styles.topicTextActive]}>All</Text>
+          </Pressable>
+          {LIST_TYPE.map(topic => (
+            <Pressable 
+              key={topic}
+              style={[styles.topicChip, selectedTopic === topic && styles.topicChipActive]}
+              onPress={() => setSelectedTopic(topic)}
+            >
+              <Text style={[styles.topicText, selectedTopic === topic && styles.topicTextActive]}>{topic}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Sort Controls */}
+      <View style={styles.sortSection}>
+        <Pressable 
+          style={[styles.sortButton, sortBy === 'name' && styles.sortButtonActive]}
+          onPress={() => setSortBy('name')}
+        >
+          <Text style={[styles.sortText, sortBy === 'name' && styles.sortTextActive]}>A-Z</Text>
+        </Pressable>
+        <Pressable 
+          style={[styles.sortButton, sortBy === 'todos' && styles.sortButtonActive]}
+          onPress={() => setSortBy('todos')}
+        >
+          <Text style={[styles.sortText, sortBy === 'todos' && styles.sortTextActive]}>To-dos</Text>
+        </Pressable>
+      </View>
       
+      {/* Lists */}
       {listIds.length === 0 ? (
         <View style={styles.emptyState}>
           <View style={styles.emptyStateCard}>
@@ -156,29 +242,28 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         </View>
+      ) : filteredAndSortedLists.length === 0 ? (
+        <View style={styles.emptyFilterState}>
+          <Text style={styles.emptyFilterText}>No {selectedTopic} lists found</Text>
+          <Pressable style={styles.createButton} onPress={handleCreateList}>
+            <Text style={styles.createButtonText}>Create New List</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
-          data={listIds}
+          data={filteredAndSortedLists}
           renderItem={renderListItem}
           keyExtractor={(item) => item}
           contentContainerStyle={styles.listContainer}
-          ListHeaderComponent={
-            <View style={styles.listHeader}>
-              <Text style={styles.listHeaderTitle}>Your Lists</Text>
-              <Pressable style={styles.addButton} onPress={handleCreateList}>
-                <Feather name="plus" size={20} color="#FFFFFF" />
-              </Pressable>
-            </View>
-          }
         />
       )}
-      
-      {/* Floating Voice Button */}
+
+      {/* Floating Create List Button */}
       <Pressable
-        style={styles.floatingVoiceButton}
-        onPress={() => setVoiceModalVisible(true)}
+        style={styles.floatingCreateButton}
+        onPress={handleCreateList}
       >
-        <Feather name="mic" size={24} color="#FFFFFF" />
+        <Feather name="plus" size={24} color="#FFFFFF" />
       </Pressable>
       
       {/* Voice Modal */}
@@ -300,25 +385,6 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: 16,
   },
-  listHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  listHeaderTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#424242',
-  },
-  addButton: {
-    backgroundColor: '#2196F3',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
 
   emptyState: {
     flex: 1,
@@ -378,17 +444,125 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.5,
   },
-  floatingVoiceButton: {
+  // Voice Interface
+  voiceSection: {
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  primaryVoiceButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 20,
+    paddingHorizontal: 40,
+    borderRadius: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    minWidth: 200,
+    justifyContent: 'center',
+  },
+  voiceButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+
+  // Topic Filters
+  filtersSection: {
+    backgroundColor: '#FFFFFF',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  filtersTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  topicFilters: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  topicChip: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginHorizontal: 4,
+  },
+  topicChipActive: {
+    backgroundColor: '#2196F3',
+  },
+  topicText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  topicTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Sort Controls
+  sortSection: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  sortButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+  },
+  sortButtonActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  sortText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  sortTextActive: {
+    color: '#2563EB',
+  },
+
+  // Empty Filter State
+  emptyFilterState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  emptyFilterText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+
+  // Floating Create Button
+  floatingCreateButton: {
     position: 'absolute',
     bottom: 30,
     right: 20,
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#2196F3',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4CAF50',
+    shadowColor: '#2196F3',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
