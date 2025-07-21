@@ -20,13 +20,15 @@ interface VoiceRecordingButtonProps {
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   disabled?: boolean;
+  size?: 'small' | 'medium' | 'large';
 }
 
 export default function VoiceRecordingButton({ 
   onRecordingComplete, 
   onRecordingStart, 
   onRecordingStop,
-  disabled = false 
+  disabled = false,
+  size = 'large'
 }: VoiceRecordingButtonProps) {
   const [hasPermission, setHasPermission] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -35,6 +37,15 @@ export default function VoiceRecordingButton({
 
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(audioRecorder);
+
+  // Size configurations
+  const sizeConfig = {
+    small: { button: 40, icon: 20, pulse: 56 },
+    medium: { button: 50, icon: 22, pulse: 70 },
+    large: { button: 60, icon: 24, pulse: 80 }
+  };
+
+  const config = sizeConfig[size];
 
   useEffect(() => {
     // Request permissions on mount
@@ -168,6 +179,9 @@ export default function VoiceRecordingButton({
             styles.pulseRing,
             {
               transform: [{ scale: pulseAnim }],
+              width: config.pulse,
+              height: config.pulse,
+              borderRadius: config.pulse / 2,
             }
           ]} 
         />
@@ -185,6 +199,11 @@ export default function VoiceRecordingButton({
             styles.button,
             isRecording && styles.recordingButton,
             disabled && styles.disabledButton,
+            {
+              width: config.button,
+              height: config.button,
+              borderRadius: config.button / 2,
+            }
           ]}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
@@ -192,7 +211,7 @@ export default function VoiceRecordingButton({
         >
           <Feather 
             name={isRecording ? "square" : "mic"} 
-            size={24} 
+            size={config.icon} 
             color={disabled ? "#9CA3AF" : "#FFFFFF"} 
           />
         </Pressable>
@@ -212,9 +231,6 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   button: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
     backgroundColor: '#2196F3',
     justifyContent: 'center',
     alignItems: 'center',
@@ -231,12 +247,14 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#E5E7EB',
     shadowOpacity: 0.1,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pulseRing: {
     position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
     borderWidth: 2,
     borderColor: '#F44336',
     opacity: 0.6,

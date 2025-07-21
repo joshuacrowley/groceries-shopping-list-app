@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,17 @@ import {
   Animated,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
-  ScrollView,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import VoiceRecordingButton from './VoiceRecordingButton';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import Constants from 'expo-constants';
+
+const { height: screenHeight } = Dimensions.get('window');
 
 // Initialize Gemini with API key from environment
 const getGeminiAPI = () => {
@@ -35,6 +38,91 @@ const callGeminiVoiceAPI = async (
   console.log("[VoiceModal] Initializing Gemini API for voice...");
   const genAI = getGeminiAPI();
 
+  // Define the response schema for structured output
+  const responseSchema = {
+    type: "object",
+    properties: {
+      message: {
+        type: "string",
+        description: "A natural language response to the user's query"
+      },
+      action: {
+        type: "object",
+        nullable: true,
+        properties: {
+          type: {
+            type: "string",
+            enum: ["navigate", "show_list", "show_items", "add_todo", "update_todo", "delete_todo", "create_list"],
+            description: "The type of action to perform"
+          },
+          target: {
+            type: "string",
+            nullable: true,
+            description: "The list ID or route to navigate to"
+          },
+          data: {
+            type: "object",
+            nullable: true,
+            properties: {
+              text: {
+                type: "string",
+                nullable: true,
+                description: "Todo text content"
+              },
+              notes: {
+                type: "string",
+                nullable: true,
+                description: "Additional notes"
+              },
+              category: {
+                type: "string",
+                nullable: true,
+                description: "Category for the todo"
+              },
+              listId: {
+                type: "string",
+                nullable: true,
+                description: "ID of the list for the todo"
+              },
+              todoId: {
+                type: "string",
+                nullable: true,
+                description: "ID of the todo to update/delete"
+              },
+              template: {
+                type: "string",
+                nullable: true,
+                description: "Template name for new list"
+              },
+              name: {
+                type: "string",
+                nullable: true,
+                description: "Name for new list or item"
+              },
+              purpose: {
+                type: "string",
+                nullable: true,
+                description: "Purpose for new list"
+              },
+              itemName: {
+                type: "string",
+                nullable: true,
+                description: "Generic item name"
+              },
+              listName: {
+                type: "string",
+                nullable: true,
+                description: "Generic list name"
+              }
+            }
+          }
+        },
+        required: ["type"]
+      }
+    },
+    required: ["message"]
+  } as any; // Type assertion to bypass strict typing while using structured output
+
   const model = genAI.getGenerativeModel({
     model: "gemini-1.5-pro",
     generationConfig: {
@@ -42,6 +130,8 @@ const callGeminiVoiceAPI = async (
       topK: 40,
       topP: 0.95,
       maxOutputTokens: 1024,
+      responseMimeType: "application/json",
+      responseSchema: responseSchema,
     },
     safetySettings: [
       {
@@ -67,29 +157,24 @@ const callGeminiVoiceAPI = async (
   const listsInfo = Object.entries(contextData?.lists || {}).map(([id, list]: [string, any]) => ({
     id,
     name: list.name,
+    type: list.type,
     itemCount: Object.values(contextData?.todos || {}).filter((todo: any) => todo.list === id).length
   }));
 
-  const prompt = `You are a helpful shopping list assistant. Analyze this voice command and respond appropriately.
+  // No need to specify JSON format in the prompt - structured output handles it
+  const prompt = `You are a helpful shopping list assistant. Analyze the user's voice command and respond appropriately.
 
 Available lists:
-${listsInfo.map(list => `- ${list.name} (${list.itemCount} items)`).join('\n')}
+${listsInfo.map(list => `- "${list.name}" (ID: ${list.id}, Type: ${list.type}, ${list.itemCount} items)`).join('\n')}
 
-Based on the voice command, provide:
-1. A natural language response message
-2. An optional action (navigate to a list, show items, etc.)
+Instructions:
+- Provide a natural, conversational response message
+- If the user wants to navigate or view a list, include an action with the list ID
+- If the user asks about items or contents, suggest showing the relevant list
+- Always use the exact list ID from the available lists above
+- Be helpful and friendly in your response`;
 
-Respond in JSON format:
-{
-  "message": "Your helpful response here",
-  "action": {
-    "type": "navigate|show_list|show_items",
-    "target": "list_id_if_applicable",
-    "data": {}
-  }
-}`;
-
-  console.log("[VoiceModal] Making request to Gemini API...");
+  console.log("[VoiceModal] Making request to Gemini API with structured output...");
 
   try {
     const result = await model.generateContent([
@@ -105,22 +190,35 @@ Respond in JSON format:
     const response = await result.response;
     const text = response.text();
     
-    console.log("[VoiceModal] Gemini raw response:", text);
+    console.log("[VoiceModal] Gemini response:", text);
     
-    // Parse the JSON response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsedResponse = JSON.parse(jsonMatch[0]);
+    // With structured output, the response should already be valid JSON
+    try {
+      const parsedResponse = JSON.parse(text);
+      console.log("[VoiceModal] Parsed structured response:", parsedResponse);
+      
+      // Validate the response structure
+      if (!parsedResponse.message) {
+        parsedResponse.message = "I understood your request.";
+      }
+      
       return parsedResponse;
-    } else {
-      // Fallback if no JSON found
+    } catch (parseError) {
+      console.error("[VoiceModal] Failed to parse structured JSON response:", parseError);
+      console.log("[VoiceModal] Raw text:", text);
+      
+      // This shouldn't happen with structured output, but keep as fallback
       return {
-        message: text,
+        message: "I heard your request but couldn't process it properly. Please try again.",
         action: null
       };
     }
   } catch (error) {
     console.error("[VoiceModal] Gemini API error:", error);
+    
+    // Log the specific error for debugging
+    console.error("[VoiceModal] Error details:", error.message || error);
+    
     throw error;
   }
 };
@@ -128,9 +226,27 @@ Respond in JSON format:
 export interface VoiceResponse {
   message: string;
   action?: {
-    type: 'navigate' | 'show_list' | 'show_items';
+    type: 'navigate' | 'show_list' | 'show_items' | 'add_todo' | 'update_todo' | 'delete_todo' | 'create_list';
     target?: string;
-    data?: any;
+    data?: {
+      // For add_todo action
+      text?: string;
+      notes?: string;
+      category?: string;
+      listId?: string;
+      
+      // For update_todo/delete_todo
+      todoId?: string;
+      
+      // For create_list
+      template?: string;
+      name?: string;
+      purpose?: string;
+      
+      // Generic fields
+      itemName?: string;
+      listName?: string;
+    };
   };
 }
 
@@ -146,34 +262,50 @@ interface VoiceModalProps {
 export default function VoiceModal({ visible, onClose, contextData }: VoiceModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [response, setResponse] = useState<VoiceResponse | null>(null);
-  const [currentStep, setCurrentStep] = useState<'ready' | 'recording' | 'processing' | 'response'>('ready');
-  const fadeAnim = useState(new Animated.Value(0))[0];
+  const [isRecording, setIsRecording] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  // Calculate content height based on state
+  const getContentHeight = () => {
+    if (showHelp) return 400;
+    if (response) return 350;
+    return 220;
+  };
 
   useEffect(() => {
     if (visible) {
-      setCurrentStep('ready');
+      // Reset state when opening
       setResponse(null);
-      Animated.timing(fadeAnim, {
+      setIsProcessing(false);
+      setIsRecording(false);
+      setShowHelp(false);
+      
+      // Animate sheet sliding up
+      Animated.spring(slideAnim, {
         toValue: 1,
-        duration: 300,
+        damping: 20,
+        stiffness: 300,
         useNativeDriver: true,
       }).start();
     } else {
-      Animated.timing(fadeAnim, {
+      // Animate sheet sliding down
+      Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 200,
+        duration: 250,
         useNativeDriver: true,
       }).start();
     }
   }, [visible]);
 
   const handleRecordingStart = () => {
-    setCurrentStep('recording');
+    setIsRecording(true);
     setResponse(null);
+    setShowHelp(false);
   };
 
   const handleRecordingStop = () => {
-    setCurrentStep('processing');
+    setIsRecording(false);
     setIsProcessing(true);
   };
 
@@ -182,47 +314,30 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
     
     try {
       setIsProcessing(true);
-      console.log('[VoiceModal] Set processing to true');
       
       // Convert audio file to base64 for upload
-      console.log('[VoiceModal] Fetching audio file...');
       const response = await fetch(audioUri);
-      console.log('[VoiceModal] Audio file fetch response:', response.status);
-      
       const blob = await response.blob();
-      console.log('[VoiceModal] Audio blob size:', blob.size, 'bytes, type:', blob.type);
       
       const reader = new FileReader();
       
       reader.onloadend = async () => {
         try {
-          console.log('[VoiceModal] FileReader completed, converting to base64...');
           const base64Audio = (reader.result as string).split(',')[1];
-          console.log('[VoiceModal] Base64 audio length:', base64Audio.length);
           
-          console.log('[VoiceModal] Context data:', {
-            listsCount: Object.keys(contextData?.lists || {}).length,
-            todosCount: Object.keys(contextData?.todos || {}).length
-          });
-          
-          // Call Gemini API directly instead of using API routes
-          console.log('[VoiceModal] Calling Gemini API directly...');
-          
+          // Call Gemini API with structured output
           const result = await callGeminiVoiceAPI(
             base64Audio,
             'audio/m4a',
             contextData
           );
           
-          console.log('[VoiceModal] API success result:', result);
           setResponse(result);
-          setCurrentStep('response');
         } catch (innerError) {
           console.error('[VoiceModal] Error in FileReader onloadend:', innerError);
           throw innerError;
         } finally {
           setIsProcessing(false);
-          console.log('[VoiceModal] Set processing to false');
         }
       };
       
@@ -232,7 +347,6 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
         throw new Error('Failed to read audio file');
       };
       
-      console.log('[VoiceModal] Starting FileReader...');
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('[VoiceModal] Voice processing error:', error);
@@ -241,7 +355,6 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
         `Failed to process your voice command: ${error.message}. Please try again.`,
         [{ text: 'OK' }]
       );
-      setCurrentStep('ready');
       setIsProcessing(false);
     }
   };
@@ -251,147 +364,215 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
 
     const { action } = response;
     
+    // Validate that we have a valid target before navigating
+    if (!action.target && (action.type === 'show_list' || action.type === 'show_items' || action.type === 'navigate')) {
+      console.error('[VoiceModal] No target specified for navigation action');
+      Alert.alert(
+        'Navigation Error',
+        'I couldn\'t determine which list to show. Please try again.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
     switch (action.type) {
       case 'navigate':
         if (action.target) {
           onClose();
-          router.push(action.target as any);
+          // Ensure the route is properly formatted
+          if (action.target.startsWith('/')) {
+            router.push(action.target as any);
+          } else {
+            router.push(`/(index)/${action.target}` as any);
+          }
         }
         break;
       case 'show_list':
-        if (action.target) {
-          onClose();
-          router.push(`/(index)/list/${action.target}`);
-        }
-        break;
       case 'show_items':
-        // Could show filtered items in a modal or navigate to a specific list
         if (action.target) {
           onClose();
+          // Navigate to the list detail page with the list ID
           router.push(`/(index)/list/${action.target}`);
         }
+        break;
+      case 'add_todo':
+        // For now, show what would be added
+        Alert.alert(
+          'Add Todo',
+          `Would add "${action.data?.text || action.data?.itemName}" to ${action.data?.listName || 'the list'}`,
+          [{ text: 'OK' }]
+        );
+        // TODO: Integrate with actual add_todo tool
+        break;
+      case 'update_todo':
+        Alert.alert(
+          'Update Todo',
+          `Would update todo ${action.data?.todoId}`,
+          [{ text: 'OK' }]
+        );
+        // TODO: Integrate with actual update_todo tool
+        break;
+      case 'delete_todo':
+        Alert.alert(
+          'Delete Todo',
+          `Would delete todo ${action.data?.todoId}`,
+          [{ text: 'OK' }]
+        );
+        // TODO: Integrate with actual delete_todo tool
+        break;
+      case 'create_list':
+        Alert.alert(
+          'Create List',
+          `Would create list with template "${action.data?.template}"`,
+          [{ text: 'OK' }]
+        );
+        // TODO: Integrate with actual create_list tool
+        break;
+      default:
+        console.warn('[VoiceModal] Unknown action type:', action.type);
         break;
     }
   };
 
-  const handleClose = () => {
-    setCurrentStep('ready');
-    setResponse(null);
-    setIsProcessing(false);
-    onClose();
-  };
-
-  const renderContent = () => {
-    switch (currentStep) {
-      case 'ready':
-        return (
-          <View style={styles.centerContent}>
-            <View style={styles.iconContainer}>
-              <Feather name="mic" size={48} color="#2196F3" />
-            </View>
-            <Text style={styles.title}>Voice Assistant</Text>
-            <Text style={styles.subtitle}>
-              Ask me about your shopping lists, add items, or navigate to specific lists
-            </Text>
-            <View style={styles.examplesContainer}>
-              <Text style={styles.examplesTitle}>Try saying:</Text>
-              <Text style={styles.example}>"What's on my grocery list?"</Text>
-              <Text style={styles.example}>"Show me my home list"</Text>
-              <Text style={styles.example}>"What do I need to buy?"</Text>
-            </View>
-            <VoiceRecordingButton
-              onRecordingStart={handleRecordingStart}
-              onRecordingStop={handleRecordingStop}
-              onRecordingComplete={handleRecordingComplete}
-            />
-          </View>
-        );
-
-      case 'recording':
-        return (
-          <View style={styles.centerContent}>
-            <View style={styles.iconContainer}>
-              <Feather name="mic" size={48} color="#F44336" />
-            </View>
-            <Text style={styles.title}>Listening...</Text>
-            <Text style={styles.subtitle}>
-              Speak your question or command
-            </Text>
-            <VoiceRecordingButton
-              onRecordingStart={handleRecordingStart}
-              onRecordingStop={handleRecordingStop}
-              onRecordingComplete={handleRecordingComplete}
-            />
-          </View>
-        );
-
-      case 'processing':
-        return (
-          <View style={styles.centerContent}>
-            <ActivityIndicator size="large" color="#2196F3" />
-            <Text style={styles.title}>Processing...</Text>
-            <Text style={styles.subtitle}>
-              Analyzing your request
-            </Text>
-          </View>
-        );
-
-      case 'response':
-        return (
-          <View style={styles.responseContainer}>
-            <View style={styles.responseHeader}>
-              <View style={styles.iconContainer}>
-                <Feather name="message-circle" size={32} color="#4CAF50" />
-              </View>
-              <Text style={styles.responseTitle}>Here's what I found:</Text>
-            </View>
-            
-            <ScrollView style={styles.responseContent} showsVerticalScrollIndicator={false}>
-              <Text style={styles.responseText}>{response?.message}</Text>
-            </ScrollView>
-
-            <View style={styles.actionButtons}>
-              {response?.action && (
-                <Pressable style={styles.actionButton} onPress={handleActionPress}>
-                  <Feather name="arrow-right" size={16} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>
-                    {response.action.type === 'navigate' ? 'Go There' : 
-                     response.action.type === 'show_list' ? 'View List' : 'Show Items'}
-                  </Text>
-                </Pressable>
-              )}
-              
-              <Pressable style={styles.askAgainButton} onPress={() => setCurrentStep('ready')}>
-                <Feather name="mic" size={16} color="#2196F3" />
-                <Text style={styles.askAgainButtonText}>Ask Again</Text>
-              </Pressable>
-            </View>
-          </View>
-        );
-
+  const getActionButtonText = () => {
+    if (!response?.action) return '';
+    
+    switch (response.action.type) {
+      case 'navigate':
+        return 'Go There';
+      case 'show_list':
+      case 'show_items':
+        return 'View List';
+      case 'add_todo':
+        return 'Add Todo';
+      case 'update_todo':
+        return 'Update Todo';
+      case 'delete_todo':
+        return 'Delete Todo';
+      case 'create_list':
+        return 'Create List';
       default:
-        return null;
+        return 'Take Action';
     }
   };
+
+  const translateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [600, 0],
+  });
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={handleClose}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container}>
-        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-          <View style={styles.header}>
-            <Pressable style={styles.closeButton} onPress={handleClose}>
-              <Feather name="x" size={24} color="#6B7280" />
-            </Pressable>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        {/* Backdrop */}
+        <Pressable 
+          style={styles.backdrop} 
+          onPress={onClose}
+        />
+        
+        {/* Bottom Sheet */}
+        <Animated.View 
+          style={[
+            styles.sheet,
+            {
+              transform: [{ translateY }],
+              minHeight: getContentHeight(),
+            }
+          ]}
+        >
+          {/* Handle bar */}
+          <View style={styles.handleContainer}>
+            <View style={styles.handle} />
           </View>
           
-          {renderContent()}
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>
+              {isRecording ? 'Listening...' : 
+               isProcessing ? 'Processing...' : 
+               response ? 'Here\'s what I found' : 
+               'Ask me anything'}
+            </Text>
+            
+            {/* Help button */}
+            {!response && !isProcessing && (
+              <Pressable 
+                style={styles.helpButton}
+                onPress={() => setShowHelp(!showHelp)}
+              >
+                <Feather 
+                  name={showHelp ? "x" : "help-circle"} 
+                  size={20} 
+                  color="#6B7280" 
+                />
+              </Pressable>
+            )}
+          </View>
+          
+          {/* Content */}
+          <View style={[styles.content, { minHeight: getContentHeight() - 80 }]}>
+            {/* Help content */}
+            {showHelp && (
+              <View style={styles.helpContent}>
+                <Text style={styles.helpTitle}>Voice Assistant Tips</Text>
+                <Text style={styles.helpText}>• "What's on my grocery list?"</Text>
+                <Text style={styles.helpText}>• "Show me my home list"</Text>
+                <Text style={styles.helpText}>• "Add milk to shopping"</Text>
+                <Text style={styles.helpText}>• "What do I need to buy?"</Text>
+                <Text style={styles.helpText}>• "Navigate to recipes"</Text>
+              </View>
+            )}
+            
+            {/* Processing indicator */}
+            {isProcessing && (
+              <View style={styles.processingContainer}>
+                <ActivityIndicator size="large" color="#2196F3" />
+              </View>
+            )}
+            
+            {/* Response content */}
+            {response && !isProcessing && (
+              <View style={styles.responseContainer}>
+                <Text style={styles.responseText}>{response.message}</Text>
+                
+                {response.action && (
+                  <Pressable 
+                    style={styles.actionButton} 
+                    onPress={handleActionPress}
+                  >
+                    <Text style={styles.actionButtonText}>
+                      {getActionButtonText()}
+                    </Text>
+                    <Feather name="arrow-right" size={16} color="#FFFFFF" />
+                  </Pressable>
+                )}
+              </View>
+            )}
+            
+            {/* Recording button - always visible at bottom */}
+            {!showHelp && (
+              <View style={styles.recordButtonContainer}>
+                <VoiceRecordingButton
+                  onRecordingStart={handleRecordingStart}
+                  onRecordingStop={handleRecordingStop}
+                  onRecordingComplete={handleRecordingComplete}
+                  disabled={isProcessing}
+                  size="medium"
+                />
+              </View>
+            )}
+          </View>
         </Animated.View>
-      </SafeAreaView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -399,136 +580,99 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    justifyContent: 'flex-end',
   },
-  content: {
-    flex: 1,
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 34, // Account for safe area
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 16,
+  },
+  handleContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 2,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 20,
-  },
-  closeButton: {
-    padding: 8,
-  },
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#E3F2FD',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#1F2937',
-    marginBottom: 8,
-    textAlign: 'center',
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
+  helpButton: {
+    padding: 8,
   },
-  examplesContainer: {
-    marginBottom: 40,
-    alignItems: 'center',
+  content: {
+    paddingHorizontal: 24,
   },
-  examplesTitle: {
+  helpContent: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  helpTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#374151',
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  example: {
-    fontSize: 14,
+  helpText: {
+    fontSize: 13,
     color: '#6B7280',
-    fontStyle: 'italic',
     marginBottom: 4,
   },
-  responseContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  responseHeader: {
+  processingContainer: {
+    paddingVertical: 40,
     alignItems: 'center',
-    marginBottom: 24,
   },
-  responseTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginTop: 8,
-  },
-  responseContent: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  responseContainer: {
+    paddingTop: 8,
   },
   responseText: {
     fontSize: 16,
     color: '#374151',
     lineHeight: 24,
-  },
-  actionButtons: {
-    gap: 12,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   actionButton: {
     backgroundColor: '#2196F3',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
     gap: 8,
-    shadowColor: '#2196F3',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   actionButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: 14,
   },
-  askAgainButton: {
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
+  recordButtonContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#2196F3',
-    gap: 8,
-  },
-  askAgainButtonText: {
-    color: '#2196F3',
-    fontWeight: '600',
-    fontSize: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
 });
