@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
 import PhosphorIcon from './PhosphorIcon';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -13,6 +13,8 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
   visible,
   onClose,
 }) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const handleCreateManually = () => {
     onClose();
     router.push('/(index)/list/new/create');
@@ -76,6 +78,8 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
 
   const capturePhoto = async (source: 'camera' | 'library') => {
     try {
+      setIsProcessing(true);
+      
       let result;
       
       if (source === 'camera') {
@@ -84,7 +88,7 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
           allowsEditing: true,
           aspect: [4, 3],
           quality: 0.8,
-          base64: true,
+          base64: false, // Don't request base64 yet
         });
       } else {
         result = await ImagePicker.launchImageLibraryAsync({
@@ -92,7 +96,7 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
           allowsEditing: true,
           aspect: [4, 3],
           quality: 0.8,
-          base64: true,
+          base64: false, // Don't request base64 yet
         });
       }
 
@@ -111,19 +115,22 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
         // Close the modal
         onClose();
         
-        // Navigate to the photo analysis screen with the photo data
+        // Navigate immediately to the photo analysis screen
         router.push({
           pathname: '/(index)/list/new/photo-analysis',
           params: {
             photoUri: asset.uri,
-            base64Image: asset.base64!,
-            mimeType: mimeType
+            mimeType: mimeType,
+            needsBase64: 'true' // Flag to process base64 on the screen
           }
         });
+      } else {
+        setIsProcessing(false);
       }
     } catch (error) {
       console.error('Error capturing photo:', error);
       Alert.alert('Error', 'Failed to capture photo. Please try again.');
+      setIsProcessing(false);
     }
   };
 
@@ -136,40 +143,50 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
     >
       <Pressable style={styles.overlay} onPress={onClose}>
         <View style={styles.modal}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Create New List</Text>
-            <Pressable onPress={onClose} style={styles.closeButton}>
-              <PhosphorIcon name="X" size={20} color="#666" weight="bold" />
-            </Pressable>
-          </View>
-          
-          <View style={styles.separator} />
+          {isProcessing ? (
+            // Show loading state while processing
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#2196F3" />
+              <Text style={styles.loadingText}>Processing photo...</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.header}>
+                <Text style={styles.title}>Create New List</Text>
+                <Pressable onPress={onClose} style={styles.closeButton}>
+                  <PhosphorIcon name="X" size={20} color="#666" weight="bold" />
+                </Pressable>
+              </View>
+              
+              <View style={styles.separator} />
 
-          <View style={styles.options}>
-            <Pressable style={styles.option} onPress={handleCreateManually}>
-              <View style={styles.optionIcon}>
-                <PhosphorIcon name="Plus" size={32} color="#2196F3" weight="bold" />
-              </View>
-              <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>Create Manually</Text>
-                <Text style={styles.optionDescription}>
-                  Choose from templates and customize your list
-                </Text>
-              </View>
-            </Pressable>
+              <View style={styles.options}>
+                <Pressable style={styles.option} onPress={handleCreateManually}>
+                  <View style={styles.optionIcon}>
+                    <PhosphorIcon name="Plus" size={32} color="#2196F3" weight="bold" />
+                  </View>
+                  <View style={styles.optionContent}>
+                    <Text style={styles.optionTitle}>Create Manually</Text>
+                    <Text style={styles.optionDescription}>
+                      Choose from templates and customize your list
+                    </Text>
+                  </View>
+                </Pressable>
 
-            <Pressable style={styles.option} onPress={handleCreateWithPhoto}>
-              <View style={styles.optionIcon}>
-                <PhosphorIcon name="Camera" size={32} color="#FF9800" weight="bold" />
+                <Pressable style={styles.option} onPress={handleCreateWithPhoto}>
+                  <View style={styles.optionIcon}>
+                    <PhosphorIcon name="Camera" size={32} color="#FF9800" weight="bold" />
+                  </View>
+                  <View style={styles.optionContent}>
+                    <Text style={styles.optionTitle}>Scan with Camera</Text>
+                    <Text style={styles.optionDescription}>
+                      Take a photo of a document, recipe, or collection to get smart template suggestions
+                    </Text>
+                  </View>
+                </Pressable>
               </View>
-              <View style={styles.optionContent}>
-                <Text style={styles.optionTitle}>Scan with Camera</Text>
-                <Text style={styles.optionDescription}>
-                  Take a photo of a document, recipe, or collection to get smart template suggestions
-                </Text>
-              </View>
-            </Pressable>
-          </View>
+            </>
+          )}
         </View>
       </Pressable>
     </Modal>
@@ -253,6 +270,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#6B7280',
     lineHeight: 20,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
   },
 });
 

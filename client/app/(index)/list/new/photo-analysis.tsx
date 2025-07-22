@@ -102,7 +102,7 @@ interface TemplateSuggestion {
 export default function PhotoAnalysisScreen() {
   const params = useLocalSearchParams();
   const photoUri = params.photoUri as string;
-  const base64Image = params.base64Image as string;
+  const needsBase64 = params.needsBase64 === 'true';
   const mimeType = params.mimeType as string || 'image/jpeg';
   
   const store = useStore();
@@ -111,20 +111,24 @@ export default function PhotoAnalysisScreen() {
   const [analysis, setAnalysis] = useState<string>('');
   const [suggestions, setSuggestions] = useState<TemplateSuggestion[]>([]);
   const [error, setError] = useState<string>('');
-  const [loadingText, setLoadingText] = useState('Analyzing your photo...');
+  const [loadingText, setLoadingText] = useState('Processing your photo...');
+  const [base64Image, setBase64Image] = useState<string>(params.base64Image as string || '');
 
   useEffect(() => {
-    if (base64Image) {
+    if (needsBase64 && photoUri) {
+      // Process base64 after navigation
+      processBase64FromUri();
+    } else if (base64Image) {
       analyzePhotoForTemplates();
     }
-  }, [base64Image]);
+  }, [needsBase64, photoUri, base64Image]);
 
   // Animate loading text
   useEffect(() => {
     if (!isAnalyzing) return;
     
     const messages = [
-      'Analyzing your photo...',
+      'Processing your photo...',
       'Understanding the content...',
       'Finding the best templates...',
       'Almost ready...'
@@ -139,13 +143,49 @@ export default function PhotoAnalysisScreen() {
     return () => clearInterval(interval);
   }, [isAnalyzing]);
 
-  const analyzePhotoForTemplates = async () => {
+  const processBase64FromUri = async () => {
+    try {
+      console.log('Converting photo to base64...');
+      
+      // Fetch the image and convert to base64
+      const response = await fetch(photoUri);
+      const blob = await response.blob();
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        console.log('Base64 conversion complete');
+        setBase64Image(base64);
+        analyzePhotoForTemplates(base64);
+      };
+      reader.onerror = () => {
+        console.error('Failed to convert image to base64');
+        setError('Failed to process image. Please try again.');
+        setIsAnalyzing(false);
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('Error processing image:', error);
+      setError('Failed to process image. Please try again.');
+      setIsAnalyzing(false);
+    }
+  };
+
+  const analyzePhotoForTemplates = async (imageData?: string) => {
+    const dataToAnalyze = imageData || base64Image;
+    if (!dataToAnalyze) {
+      setError('No image data available');
+      setIsAnalyzing(false);
+      return;
+    }
+
     try {
       console.log('Starting photo analysis with direct Gemini call...');
+      console.log('Using model: gemini-2.5-flash');
       
       const genAI = getGeminiAPI();
       const model = genAI.getGenerativeModel({
-        model: "gemini-2.5-flash-lite-preview-06-17",
+        model: "gemini-2.5-flash",
         generationConfig: {
           temperature: 0.3,
           topK: 32,
@@ -201,6 +241,7 @@ RESPONSE FORMAT:
 Focus on practical utility - choose templates that would actually help the user organize the content they photographed.`;
 
       console.log('Calling Gemini API...');
+      console.log('Image data length:', dataToAnalyze.length);
       
       const result = await withTimeout(
         model.generateContent([
@@ -208,11 +249,11 @@ Focus on practical utility - choose templates that would actually help the user 
           { 
             inlineData: { 
               mimeType: mimeType, 
-              data: base64Image 
+              data: dataToAnalyze 
             } 
           }
         ]),
-        15000 // 15 second timeout
+        20000 // 20 second timeout
       );
 
       const response = await result.response;
@@ -239,9 +280,25 @@ Focus on practical utility - choose templates that would actually help the user 
       setSuggestions(enrichedSuggestions);
       setIsAnalyzing(false);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error analyzing photo:', error);
-      setError('Failed to analyze photo. Please try again.');
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      
+      let errorMessage = 'Failed to analyze photo. Please try again.';
+      
+      if (error.message?.includes('Network request failed')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. Please try again.';
+      } else if (error.message?.includes('API key')) {
+        errorMessage = 'API configuration error. Please check your settings.';
+      }
+      
+      setError(errorMessage);
       setIsAnalyzing(false);
       
       // Provide fallback suggestions
