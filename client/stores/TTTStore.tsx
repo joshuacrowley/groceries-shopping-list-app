@@ -190,9 +190,27 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
             error: event,
           });
         });
+        
+        // Add message debugging
+        ws.addEventListener("message", (event) => {
+          debugLog("WebSocket message received:", {
+            data: event.data,
+            type: typeof event.data,
+            length: event.data?.length
+          });
+        });
 
         const synchronizer = await createWsSynchronizer(store, ws, 1);
+        
+        // Add a small delay to ensure server is ready
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         await synchronizer.startSync();
+        
+        // Force an initial load after connection
+        debugLog("Forcing initial data load...");
+        await synchronizer.load();
+        await synchronizer.save();
 
         // If the websocket reconnects, get a fresh token and reconnect
         synchronizer.getWebSocket().addEventListener("open", async () => {
