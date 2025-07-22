@@ -2,6 +2,7 @@ import ReconnectingWebSocket from "reconnecting-websocket";
 import { createWsSynchronizer } from "tinybase/synchronizers/synchronizer-ws-client/with-schemas";
 import * as UiReact from "tinybase/ui-react/with-schemas";
 import { MergeableStore, OptionalSchemas } from "tinybase/with-schemas";
+import { useAuth, useOrganization } from "@clerk/clerk-expo";
 
 const SYNC_SERVER_URL = process.env.EXPO_PUBLIC_SYNC_SERVER_URL;
 
@@ -16,14 +17,30 @@ export const useCreateServerSynchronizerAndStart = <
 >(
   storeId: string,
   store: MergeableStore<Schemas>
-) =>
-  (UiReact as UiReact.WithSchemas<Schemas>).useCreateSynchronizer(
+) => {
+  const { getToken } = useAuth();
+  const { organization } = useOrganization();
+
+  return (UiReact as UiReact.WithSchemas<Schemas>).useCreateSynchronizer(
     store,
     async (store: MergeableStore<Schemas>) => {
+      if (!organization?.id) {
+        throw new Error("Organization required for synchronization");
+      }
+
+      // Get auth token for WebSocket connection
+      const token = await getToken();
+      if (!token) {
+        throw new Error("Authentication token required for synchronization");
+      }
+
+      // Construct WebSocket URL with organization context
+      const wsUrl = `${SYNC_SERVER_URL}/sync/${organization.id}?token=${token}`;
+
       // Create the synchronizer.
       const synchronizer = await createWsSynchronizer(
         store,
-        new ReconnectingWebSocket(SYNC_SERVER_URL + storeId, [], {
+        new ReconnectingWebSocket(wsUrl, [], {
           maxReconnectionDelay: 1000,
           connectionTimeout: 1000,
         })
@@ -39,5 +56,6 @@ export const useCreateServerSynchronizerAndStart = <
 
       return synchronizer;
     },
-    [storeId]
+    [storeId, organization?.id]
   );
+};

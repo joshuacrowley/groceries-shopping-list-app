@@ -1,11 +1,333 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Chakra UI compatible design tokens for React Native
+ * Colors, typography, spacing, and breakpoints mirroring Chakra UI's design system
  */
 
 const tintColorLight = "#0a7ea4";
 const tintColorDark = "#fff";
 
+// Chakra UI Color Palette
+export const chakraColors = {
+  transparent: "transparent",
+  current: "currentColor",
+  black: "#000000",
+  white: "#FFFFFF",
+
+  whiteAlpha: {
+    50: "rgba(255, 255, 255, 0.04)",
+    100: "rgba(255, 255, 255, 0.06)",
+    200: "rgba(255, 255, 255, 0.08)",
+    300: "rgba(255, 255, 255, 0.16)",
+    400: "rgba(255, 255, 255, 0.24)",
+    500: "rgba(255, 255, 255, 0.36)",
+    600: "rgba(255, 255, 255, 0.48)",
+    700: "rgba(255, 255, 255, 0.64)",
+    800: "rgba(255, 255, 255, 0.80)",
+    900: "rgba(255, 255, 255, 0.92)",
+  },
+
+  blackAlpha: {
+    50: "rgba(0, 0, 0, 0.04)",
+    100: "rgba(0, 0, 0, 0.06)",
+    200: "rgba(0, 0, 0, 0.08)",
+    300: "rgba(0, 0, 0, 0.16)",
+    400: "rgba(0, 0, 0, 0.24)",
+    500: "rgba(0, 0, 0, 0.36)",
+    600: "rgba(0, 0, 0, 0.48)",
+    700: "rgba(0, 0, 0, 0.64)",
+    800: "rgba(0, 0, 0, 0.80)",
+    900: "rgba(0, 0, 0, 0.92)",
+  },
+
+  gray: {
+    50: "#F7FAFC",
+    100: "#EDF2F7",
+    200: "#E2E8F0",
+    300: "#CBD5E0",
+    400: "#A0AEC0",
+    500: "#718096",
+    600: "#4A5568",
+    700: "#2D3748",
+    800: "#1A202C",
+    900: "#171923",
+  },
+
+  red: {
+    50: "#FFF5F5",
+    100: "#FED7D7",
+    200: "#FEB2B2",
+    300: "#FC8181",
+    400: "#F56565",
+    500: "#E53E3E",
+    600: "#C53030",
+    700: "#9B2C2C",
+    800: "#822727",
+    900: "#63171B",
+  },
+
+  orange: {
+    50: "#FFFAF0",
+    100: "#FEEBC8",
+    200: "#FBD38D",
+    300: "#F6AD55",
+    400: "#ED8936",
+    500: "#DD6B20",
+    600: "#C05621",
+    700: "#9C4221",
+    800: "#7B341E",
+    900: "#652B19",
+  },
+
+  yellow: {
+    50: "#FFFFF0",
+    100: "#FEFCBF",
+    200: "#FAF089",
+    300: "#F6E05E",
+    400: "#ECC94B",
+    500: "#D69E2E",
+    600: "#B7791F",
+    700: "#975A16",
+    800: "#744210",
+    900: "#5F370E",
+  },
+
+  green: {
+    50: "#F0FFF4",
+    100: "#C6F6D5",
+    200: "#9AE6B4",
+    300: "#68D391",
+    400: "#48BB78",
+    500: "#38A169",
+    600: "#2F855A",
+    700: "#276749",
+    800: "#22543D",
+    900: "#1C4532",
+  },
+
+  teal: {
+    50: "#E6FFFA",
+    100: "#B2F5EA",
+    200: "#81E6D9",
+    300: "#4FD1C5",
+    400: "#38B2AC",
+    500: "#319795",
+    600: "#2C7A7B",
+    700: "#285E61",
+    800: "#234E52",
+    900: "#1D4044",
+  },
+
+  blue: {
+    50: "#ebf8ff",
+    100: "#bee3f8",
+    200: "#90cdf4",
+    300: "#63b3ed",
+    400: "#4299e1",
+    500: "#3182ce",
+    600: "#2b6cb0",
+    700: "#2c5282",
+    800: "#2a4365",
+    900: "#1A365D",
+  },
+
+  cyan: {
+    50: "#EDFDFD",
+    100: "#C4F1F9",
+    200: "#9DECF9",
+    300: "#76E4F7",
+    400: "#0BC5EA",
+    500: "#00B5D8",
+    600: "#00A3C4",
+    700: "#0987A0",
+    800: "#086F83",
+    900: "#065666",
+  },
+
+  purple: {
+    50: "#FAF5FF",
+    100: "#E9D8FD",
+    200: "#D6BCFA",
+    300: "#B794F4",
+    400: "#9F7AEA",
+    500: "#805AD5",
+    600: "#6B46C1",
+    700: "#553C9A",
+    800: "#44337A",
+    900: "#322659",
+  },
+
+  pink: {
+    50: "#FFF5F7",
+    100: "#FED7E2",
+    200: "#FBB6CE",
+    300: "#F687B3",
+    400: "#ED64A6",
+    500: "#D53F8C",
+    600: "#B83280",
+    700: "#97266D",
+    800: "#702459",
+    900: "#521B41",
+  },
+};
+
+// Typography Design Tokens
+export const typography = {
+  fontSizes: {
+    xs: 12,
+    sm: 14,
+    md: 16,
+    lg: 18,
+    xl: 20,
+    "2xl": 24,
+    "3xl": 30,
+    "4xl": 36,
+    "5xl": 48,
+    "6xl": 60,
+    "7xl": 72,
+    "8xl": 96,
+    "9xl": 128,
+  },
+  fontWeights: {
+    hairline: "100",
+    thin: "200",
+    light: "300",
+    normal: "400",
+    medium: "500",
+    semibold: "600",
+    bold: "700",
+    extrabold: "800",
+    black: "900",
+  },
+  lineHeights: {
+    normal: "normal",
+    none: 1,
+    shorter: 1.25,
+    short: 1.375,
+    base: 1.5,
+    tall: 1.625,
+    taller: 2,
+    3: 12,
+    4: 16,
+    5: 20,
+    6: 24,
+    7: 28,
+    8: 32,
+    9: 36,
+    10: 40,
+  },
+  letterSpacings: {
+    tighter: -0.5,
+    tight: -0.25,
+    normal: 0,
+    wide: 0.25,
+    wider: 0.5,
+    widest: 1,
+  },
+};
+
+// Spacing Design Tokens (consistent with Chakra UI's scale)
+export const spacing = {
+  px: 1,
+  0.5: 2,
+  1: 4,
+  1.5: 6,
+  2: 8,
+  2.5: 10,
+  3: 12,
+  3.5: 14,
+  4: 16,
+  5: 20,
+  6: 24,
+  7: 28,
+  8: 32,
+  9: 36,
+  10: 40,
+  12: 48,
+  14: 56,
+  16: 64,
+  20: 80,
+  24: 96,
+  28: 112,
+  32: 128,
+  36: 144,
+  40: 160,
+  44: 176,
+  48: 192,
+  52: 208,
+  56: 224,
+  60: 240,
+  64: 256,
+  72: 288,
+  80: 320,
+  96: 384,
+};
+
+// Sizing Design Tokens
+export const sizes = {
+  ...spacing,
+  max: "100%",
+  min: "min-content",
+  full: "100%",
+  "3xs": 224,
+  "2xs": 256,
+  xs: 320,
+  sm: 384,
+  md: 448,
+  lg: 512,
+  xl: 576,
+  "2xl": 672,
+  "3xl": 768,
+  "4xl": 896,
+  "5xl": 1024,
+  "6xl": 1152,
+  "7xl": 1280,
+  "8xl": 1408,
+  container: {
+    sm: 640,
+    md: 768,
+    lg: 1024,
+    xl: 1280,
+  },
+};
+
+// Breakpoints for responsive design
+export const breakpoints = {
+  base: 0,
+  sm: 480,
+  md: 768,
+  lg: 992,
+  xl: 1280,
+  "2xl": 1536,
+};
+
+// Border Radius Design Tokens
+export const radii = {
+  none: 0,
+  sm: 2,
+  base: 4,
+  md: 6,
+  lg: 8,
+  xl: 12,
+  "2xl": 16,
+  "3xl": 24,
+  full: 9999,
+};
+
+// Shadow Design Tokens
+export const shadows = {
+  xs: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+  sm: "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)",
+  base: "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)",
+  md: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+  lg: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+  xl: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+  "2xl": "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+  outline: "0 0 0 3px rgba(66, 153, 225, 0.6)",
+  inner: "inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)",
+  none: "none",
+};
+
+// Legacy colors for compatibility
 export const zincColors = {
   50: "#fafafa",
   100: "#f4f4f5",
@@ -22,9 +344,9 @@ export const zincColors = {
 
 export const appleBlue = "#007AFF";
 export const appleRed = "#FF3B30";
-
 export const borderColor = "#A1A1AA80";
 export const appleGreen = "#34C759";
+
 export const Colors = {
   light: {
     text: "#11181C",

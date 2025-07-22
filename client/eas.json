@@ -16,7 +16,11 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "API_URL": "https://api.example.com",
+        "FEATURE_FLAG": "true"
+      }
     }
   },
   "submit": {

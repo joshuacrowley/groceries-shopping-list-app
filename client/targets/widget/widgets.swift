@@ -45,7 +45,7 @@ struct widgetEntryView : View {
     if useMockData {
       return "10"
     } else {
-      let defaults = UserDefaults(suiteName: "group.com.betoatexpo.groceries-shopping-list")
+      let defaults = UserDefaults(suiteName: "group.com.joshuacrowley.tinytalkingtodo")
       return defaults?.string(forKey: "widget_total_lists")
     }
   }
@@ -76,7 +76,7 @@ struct widgetEntryView : View {
       }
       return allLists
     } else {
-      let defaults = UserDefaults(suiteName: "group.com.betoatexpo.groceries-shopping-list")
+      let defaults = UserDefaults(suiteName: "group.com.joshuacrowley.tinytalkingtodo")
       guard let data = defaults?.data(forKey: "widget_recent_lists"),
             let lists = try? JSONDecoder().decode([RecentList].self, from: data) else {
         return nil

@@ -1,15 +1,20 @@
 import * as React from "react";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
+import { View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { BodyScrollView } from "@/components/ui/BodyScrollView";
 import Button from "@/components/ui/button";
 import TextInput from "@/components/ui/text-input";
-import { isClerkAPIResponseError, useSignUp } from "@clerk/clerk-expo";
+import { isClerkAPIResponseError, useSignUp, useOAuth } from "@clerk/clerk-expo";
 import { ClerkAPIError } from "@clerk/types";
+import * as WebBrowser from "expo-web-browser";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function SignUpScreen() {
   const { isLoaded, signUp, setActive } = useSignUp();
+  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
   const router = useRouter();
 
   const [emailAddress, setEmailAddress] = React.useState("");
@@ -18,6 +23,7 @@ export default function SignUpScreen() {
   const [code, setCode] = React.useState("");
   const [errors, setErrors] = React.useState<ClerkAPIError[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = React.useState(false);
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;
@@ -45,6 +51,27 @@ export default function SignUpScreen() {
       console.error(JSON.stringify(err, null, 2));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const onGoogleSignInPress = async () => {
+    if (process.env.EXPO_OS === "ios") {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setIsGoogleSigningIn(true);
+    
+    try {
+      const { createdSessionId, setActive } = await startOAuthFlow();
+      
+      if (createdSessionId) {
+        await setActive!({ session: createdSessionId });
+        router.replace("/(index)");
+      }
+    } catch (err) {
+      if (isClerkAPIResponseError(err)) setErrors(err.errors);
+      console.error("Google OAuth error:", JSON.stringify(err, null, 2));
+    } finally {
+      setIsGoogleSigningIn(false);
     }
   };
 
@@ -129,6 +156,20 @@ export default function SignUpScreen() {
       >
         Continue
       </Button>
+      
+      <View style={{ marginTop: 16, alignItems: "center" }}>
+        <ThemedText style={{ marginBottom: 12, color: '#666' }}>Or continue with</ThemedText>
+        <Button
+          onPress={onGoogleSignInPress}
+          loading={isGoogleSigningIn}
+          disabled={isGoogleSigningIn || isLoading}
+          variant="outline"
+          style={{ width: '100%' }}
+        >
+          {isGoogleSigningIn ? 'Signing in...' : 'Continue with Google'}
+        </Button>
+      </View>
+      
       {errors.map((error) => (
         <ThemedText key={error.longMessage} style={{ color: "red" }}>
           {error.longMessage}

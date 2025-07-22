@@ -1,19 +1,20 @@
 {
   "expo": {
-    "name": "Shopping List",
-    "slug": "groceries-shopping-list",
-    "version": "1.2.2",
+    "sdkVersion": "53.0.0",
+    "name": "Tiny Talking Todos",
+    "slug": "tiny-talking-todos",
+    "version": "0.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "groceries-shopping-list",
+    "icon": "./assets/images/adaptive-icon.png",
+    "scheme": "tinytalkingtodos",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.betoatexpo.groceries-shopping-list",
-      "appleTeamId": "T2A8YY9YDW",
+      "bundleIdentifier": "com.joshuacrowley.tinytalkingtodos",
+      "appleTeamId": "L58BK45YGQ",
       "icon": {
-        "light": "./assets/images/icon.png",
+        "light": "./assets/images/adaptive-icon.png",
         "dark": "./assets/images/icon-dark.png",
         "tinted": "./assets/images/icon-tinted.png"
       },
@@ -22,7 +23,7 @@
       },
       "entitlements": {
         "com.apple.security.application-groups": [
-          "group.com.betoatexpo.groceries-shopping-list"
+          "group.com.joshuacrowley.tinytalkingtodos"
         ]
       }
     },
@@ -31,12 +32,16 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.betoatexpo.groceriesshoppinglist"
+      "package": "com.joshuacrowley.tinytalkingtodos",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
       "output": "server",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/adaptive-icon.png"
     },
     "plugins": [
       "expo-router",
@@ -81,7 +86,33 @@
         "origin": false
       },
       "eas": {
-        "projectId": "7428a2a2-f953-4c9f-8be3-74117e5fdc8d"
+        "projectId": "f46d33fa-6227-4139-91d5-de3484385a9b",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "bundleIdentifier": "com.joshuacrowley.tinytalkingtodos.widget",
+                  "targetName": "widget",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.joshuacrowley.tinytalkingtodos"
+                    ]
+                  }
+                },
+                {
+                  "bundleIdentifier": "com.joshuacrowley.tinytalkingtodos.widget",
+                  "targetName": "widget",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.joshuacrowley.tinytalkingtodos"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
       }
     },
     "runtimeVersion": {
@@ -89,6 +120,7 @@
     },
     "updates": {
       "url": "https://u.expo.dev/7428a2a2-f953-4c9f-8be3-74117e5fdc8d"
-    }
+    },
+    "owner": "joshuacrowley"
   }
 }

@@ -1,18 +1,19 @@
 import React from "react";
 import { useNetworkState } from "expo-network";
-import { Redirect, router, Stack } from "expo-router";
+import { Redirect, router, Tabs } from "expo-router";
 import { Alert } from "react-native";
-import { Provider as TinyBaseProvider } from "tinybase/ui-react";
 import { Inspector } from "tinybase/ui-react-inspector";
 import { Button } from "@/components/ui/button";
 import { ListCreationProvider } from "@/context/ListCreationContext";
-import ShoppingListsStore from "@/stores/ShoppingListsStore";
 import { SignedIn, useUser } from "@clerk/clerk-expo";
 import { WidgetProvider } from "@/contexts/WidgetContext";
+import TTTStoreProvider from "@/stores/TTTStore";
 
 export const unstable_settings = {
   initialRouteName: "index",
 };
+
+import { StatusBar } from "expo-status-bar";
 
 export default function AppIndexLayout() {
   const { user } = useUser();
@@ -36,11 +37,11 @@ export default function AppIndexLayout() {
 
   return (
     <SignedIn>
-      <TinyBaseProvider>
+      <StatusBar style="auto" animated />
+      <TTTStoreProvider>
         <WidgetProvider>
-          <ShoppingListsStore />
           <ListCreationProvider>
-            <Stack
+            <Tabs
               screenOptions={{
                 ...(process.env.EXPO_OS !== "ios"
                   ? {}
@@ -51,21 +52,32 @@ export default function AppIndexLayout() {
                       headerLargeTitleShadowVisible: false,
                       headerShadowVisible: true,
                       headerLargeStyle: {
-                        // NEW: Make the large title transparent to match the background.
+                        // Make the large title transparent to match the background.
                         backgroundColor: "transparent",
                       },
                     }),
+                tabBarStyle: { display: "none" }, // Hide the tab bar
               }}
             >
-              <Stack.Screen
+              {/* Hidden: List creation form
+              <Tabs.Screen
                 name="list/new/index"
                 options={{
                   presentation: "formSheet",
                   sheetGrabberVisible: true,
                   headerShown: false,
+                  href: null,
                 }}
               />
-              <Stack.Screen
+              */}
+              <Tabs.Screen
+                name="list/[listId]/index"
+                options={{
+                  headerShown: false,
+                  href: null,
+                }}
+              />
+              <Tabs.Screen
                 name="list/[listId]/edit"
                 options={{
                   presentation: "formSheet",
@@ -73,9 +85,10 @@ export default function AppIndexLayout() {
                   sheetGrabberVisible: true,
                   headerLargeTitle: false,
                   headerTitle: "Edit list",
+                  href: null,
                 }}
               />
-              <Stack.Screen
+              <Tabs.Screen
                 name="list/[listId]/product/new"
                 options={{
                   presentation: "formSheet",
@@ -83,9 +96,11 @@ export default function AppIndexLayout() {
                   sheetGrabberVisible: true,
                   headerLargeTitle: false,
                   headerTitle: "Add product",
+                  href: null,
                 }}
               />
-              <Stack.Screen
+              {/* Hidden: Scan QR for new list
+              <Tabs.Screen
                 name="list/new/scan"
                 options={{
                   presentation: "fullScreenModal",
@@ -96,9 +111,11 @@ export default function AppIndexLayout() {
                       Cancel
                     </Button>
                   ),
+                  href: null,
                 }}
               />
-              <Stack.Screen
+              */}
+              <Tabs.Screen
                 name="list/[listId]/product/[productId]"
                 options={{
                   presentation: "formSheet",
@@ -106,27 +123,43 @@ export default function AppIndexLayout() {
                   sheetGrabberVisible: true,
                   headerLargeTitle: false,
                   headerTitle: "Details",
+                  href: null,
                 }}
               />
-              <Stack.Screen
+              <Tabs.Screen
                 name="list/[listId]/share"
                 options={{
                   presentation: "formSheet",
                   sheetGrabberVisible: true,
                   headerLargeTitle: false,
                   headerTitle: "Invite",
+                  href: null,
                 }}
               />
-              <Stack.Screen
+              <Tabs.Screen
+                name="lists"
+                options={{
+                  headerShown: false
+                }}
+              />
+              <Tabs.Screen
+                name="test"
+                options={{
+                  headerShown: false,
+                  href: null,
+                }}
+              />
+              <Tabs.Screen
                 name="profile"
                 options={{
                   presentation: "formSheet",
                   sheetAllowedDetents: [0.75, 1],
                   sheetGrabberVisible: true,
                   headerShown: false,
+                  href: null,
                 }}
               />
-              <Stack.Screen
+              <Tabs.Screen
                 name="emoji-picker"
                 options={{
                   presentation: "formSheet",
@@ -134,9 +167,10 @@ export default function AppIndexLayout() {
                   headerTitle: "Choose an emoji",
                   sheetAllowedDetents: [0.5, 0.75, 1],
                   sheetGrabberVisible: true,
+                  href: null,
                 }}
               />
-              <Stack.Screen
+              <Tabs.Screen
                 name="color-picker"
                 options={{
                   presentation: "formSheet",
@@ -144,14 +178,21 @@ export default function AppIndexLayout() {
                   headerTitle: "Choose a color",
                   sheetAllowedDetents: [0.5, 0.75, 1],
                   sheetGrabberVisible: true,
+                  href: null,
                 }}
               />
-            </Stack>
+              <Tabs.Screen
+                name="index"
+                options={{
+                  headerShown: false,
+                }}
+              />
+            </Tabs>
           </ListCreationProvider>
 
           {process.env.EXPO_OS === "web" ? <Inspector /> : null}
         </WidgetProvider>
-      </TinyBaseProvider>
+      </TTTStoreProvider>
     </SignedIn>
   );
 }

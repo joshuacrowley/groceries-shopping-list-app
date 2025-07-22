@@ -14,14 +14,21 @@ import { ThemedText } from "@/components/ThemedText";
 import { BodyScrollView } from "@/components/ui/BodyScrollView";
 import Button from "@/components/ui/button";
 import { appleBlue, appleGreen, appleRed } from "@/constants/Colors";
-import { useClerk, useUser } from "@clerk/clerk-expo";
-import { useEffect } from "react";
+import { useClerk, useUser, useOrganization, useAuth } from "@clerk/clerk-expo";
+import { useEffect, useState } from "react";
 import { IconSymbol } from "@/components/ui/IconSymbol";
+import { useStore, useRowIds } from 'tinybase/ui-react';
+import Constants from 'expo-constants';
 
 export default function ProfileScreen() {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { organization } = useOrganization();
+  const { getToken } = useAuth();
+  const store = useStore();
+  const listIds = useRowIds('lists') || [];
   const router = useRouter();
+  const [showDebug, setShowDebug] = useState(false);
 
   const { isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
 
@@ -101,6 +108,11 @@ export default function ProfileScreen() {
 
   return (
     <BodyScrollView contentContainerStyle={styles.container}>
+      <View style={styles.closeButtonContainer}>
+        <Pressable onPress={() => router.push('/(index)')} style={styles.closeButton}>
+          <IconSymbol name="xmark" size={18} color="gray" />
+        </Pressable>
+      </View>
       <View>
         <View style={styles.header}>
           {user?.imageUrl ? (
@@ -214,6 +226,76 @@ export default function ProfileScreen() {
       >
         Delete account
       </Button>
+
+      {/* Debug Section */}
+      <View style={styles.section}>
+        <Pressable onPress={() => setShowDebug(!showDebug)} style={styles.debugToggle}>
+          <ThemedText type="defaultSemiBold" style={styles.debugToggleText}>
+            {showDebug ? '▼' : '▶'} Debug Info
+          </ThemedText>
+        </Pressable>
+        
+        {showDebug && (
+          <View style={styles.debugContent}>
+            <View style={styles.debugSection}>
+              <ThemedText type="defaultSemiBold" style={styles.debugHeading}>Auth Status</ThemedText>
+              <View style={styles.debugRow}>
+                <ThemedText>User ID:</ThemedText>
+                <ThemedText style={styles.debugValue}>{user?.id || 'None'}</ThemedText>
+              </View>
+              <View style={styles.debugRow}>
+                <ThemedText>Organization:</ThemedText>
+                <ThemedText style={styles.debugValue}>{organization?.name || 'None'}</ThemedText>
+              </View>
+              <View style={styles.debugRow}>
+                <ThemedText>Org ID:</ThemedText>
+                <ThemedText style={styles.debugValue}>{organization?.id || 'None'}</ThemedText>
+              </View>
+            </View>
+            
+            <View style={styles.debugSection}>
+              <ThemedText type="defaultSemiBold" style={styles.debugHeading}>TinyBase Store</ThemedText>
+              <View style={styles.debugRow}>
+                <ThemedText>List Count:</ThemedText>
+                <ThemedText style={styles.debugValue}>{listIds.length}</ThemedText>
+              </View>
+              <View style={styles.debugRow}>
+                <ThemedText>List IDs:</ThemedText>
+                <ThemedText style={styles.debugValue} numberOfLines={2}>{listIds.join(', ') || 'None'}</ThemedText>
+              </View>
+            </View>
+            
+            <View style={styles.debugSection}>
+              <ThemedText type="defaultSemiBold" style={styles.debugHeading}>Environment</ThemedText>
+              <View style={styles.debugRow}>
+                <ThemedText>Server URL:</ThemedText>
+                <ThemedText style={styles.debugValue} numberOfLines={2}>
+                  {Constants.expoConfig?.extra?.EXPO_PUBLIC_SYNC_SERVER_URL || 'Not set'}
+                </ThemedText>
+              </View>
+              <View style={styles.debugRow}>
+                <ThemedText>Environment:</ThemedText>
+                <ThemedText style={styles.debugValue}>{process.env.NODE_ENV || 'Not set'}</ThemedText>
+              </View>
+            </View>
+            
+            <Button
+              variant="ghost"
+              onPress={async () => {
+                try {
+                  const token = await getToken();
+                  Alert.alert('Token Status', token ? 'Token is available' : 'No token available');
+                } catch (e) {
+                  Alert.alert('Error', 'Failed to get token: ' + e.message);
+                }
+              }}
+              textStyle={{ color: appleBlue, fontSize: 14 }}
+            >
+              Test Authentication Token
+            </Button>
+          </View>
+        )}
+      </View>
     </BodyScrollView>
   );
 }
@@ -223,6 +305,15 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 32,
     gap: 24,
+  },
+  closeButtonContainer: {
+    alignItems: "flex-end",
+    marginBottom: -8,
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: 16,
+    backgroundColor: "rgba(150, 150, 150, 0.1)",
   },
   header: {
     flexDirection: "row",
@@ -276,5 +367,36 @@ const styles = StyleSheet.create({
   },
   updateText: {
     color: "#34C759",
+  },
+  debugToggle: {
+    paddingVertical: 8,
+  },
+  debugToggleText: {
+    color: "#666",
+    fontSize: 14,
+  },
+  debugContent: {
+    marginTop: 8,
+    gap: 16,
+  },
+  debugSection: {
+    gap: 8,
+  },
+  debugHeading: {
+    fontSize: 14,
+    color: appleBlue,
+    marginBottom: 4,
+  },
+  debugRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  debugValue: {
+    fontSize: 12,
+    opacity: 0.7,
+    flex: 1,
+    textAlign: "right",
   },
 });

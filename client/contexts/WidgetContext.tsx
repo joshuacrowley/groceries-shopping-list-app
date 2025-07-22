@@ -10,7 +10,7 @@ import { useShoppingListValue } from "@/stores/ShoppingListStore";
 
 // Initialize storage with your group ID
 const storage = new ExtensionStorage(
-  "group.com.betoatexpo.groceries-shopping-list"
+  "group.com.joshuacrowley.tinytalkingtodos"
 );
 
 type WidgetContextType = {
@@ -23,7 +23,7 @@ export function WidgetProvider({ children }: { children: React.ReactNode }) {
   const recentLists = useRecentShoppingLists();
   const shoppingListIds = useShoppingListIds();
   // console.log("recentLists", recentLists.length);
-  console.log("recentLists", recentLists);
+  // console.log("recentLists", recentLists);
 
   // Update widget state whenever recentLists changes
   React.useEffect(() => {
