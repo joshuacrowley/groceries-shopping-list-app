@@ -1,8 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useRow } from 'tinybase/ui-react';
+import { useRow, useStore, useAddRowCallback } from 'tinybase/ui-react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TodoList from '@/Basic';
 import ShoppingListv2 from '@/templates/ShoppingListv2';
@@ -12,11 +12,130 @@ import WeekendPlanner from '@/templates/WeekendPlanner';
 import Recipes from '@/templates/Recipes';
 import RecipeCard from '@/templates/RecipeCard';
 import PhotoUploader from '@/components/PhotoUploader';
+import Constants from 'expo-constants';
 
 export default function ListDetailScreen() {
-  const { listId } = useLocalSearchParams();
+  const { 
+    listId, 
+    generateTodos, 
+    fromPhoto, 
+    photoAnalysis, 
+    templateId,
+    systemPrompt 
+  } = useLocalSearchParams();
   const list = useRow('lists', listId as string);
   const insets = useSafeAreaInsets();
+  const store = useStore();
+  
+  const [isGeneratingTodos, setIsGeneratingTodos] = useState(false);
+  const [generationMessage, setGenerationMessage] = useState('');
+  
+  const addTodo = useAddRowCallback(
+    'todos',
+    (todoData: any) => ({
+      text: todoData.text || '',
+      notes: todoData.notes || '',
+      emoji: todoData.emoji || '',
+      category: todoData.category || '',
+      type: todoData.type || 'A',
+      done: todoData.done || false,
+      list: listId as string,
+      // Add optional fields if present
+      ...(todoData.date && { date: todoData.date }),
+      ...(todoData.time && { time: todoData.time }),
+      ...(todoData.amount && { amount: todoData.amount }),
+      ...(todoData.url && { url: todoData.url }),
+      ...(todoData.email && { email: todoData.email }),
+      ...(todoData.streetAddress && { streetAddress: todoData.streetAddress }),
+      ...(todoData.number && { number: todoData.number }),
+      ...(todoData.fiveStarRating && { fiveStarRating: todoData.fiveStarRating }),
+    }),
+    [listId]
+  );
+  
+  useEffect(() => {
+    // Generate todos if requested
+    if (generateTodos === 'true' && list) {
+      generateTodosForList();
+    }
+  }, [generateTodos, list]);
+  
+  const generateTodosForList = async () => {
+    try {
+      setIsGeneratingTodos(true);
+      setGenerationMessage('Analyzing your photo and creating todos...');
+      
+      // Determine API URL
+      let apiBaseUrl = '';
+      if (__DEV__) {
+        const bundleUrl = Constants.experienceUrl;
+        if (bundleUrl) {
+          try {
+            const url = new URL(bundleUrl);
+            apiBaseUrl = `http://${url.hostname}:8081`;
+          } catch (e) {
+            apiBaseUrl = 'http://localhost:8081';
+          }
+        }
+      }
+      
+      const requestBody = {
+        systemPrompt: systemPrompt || list.systemPrompt || '',
+        description: list.purpose || '',
+        listName: list.name,
+        listType: list.type,
+        template: templateId || list.template,
+        photoData: photoAnalysis || '',
+        fromVoice: 'false',
+        fromPhoto: fromPhoto || 'false'
+      };
+      
+      console.log('Generating todos with:', requestBody);
+      
+      const response = await fetch(`${apiBaseUrl}/api/generate-todos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to generate todos: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('Generated todos:', result);
+      
+      if (result.todos && result.todos.length > 0) {
+        setGenerationMessage(`Adding ${result.todos.length} todos to your list...`);
+        
+        // Add todos in a transaction
+        store.transaction(() => {
+          result.todos.forEach((todo: any) => {
+            addTodo(todo);
+          });
+        });
+        
+        setGenerationMessage('All done! Your todos have been added.');
+        
+        // Hide the success message after a short delay
+        setTimeout(() => {
+          setIsGeneratingTodos(false);
+        }, 1500);
+      } else {
+        throw new Error('No todos were generated');
+      }
+      
+    } catch (error) {
+      console.error('Error generating todos:', error);
+      Alert.alert(
+        'Generation Failed',
+        'Unable to generate todos from your photo. You can add todos manually.',
+        [{ text: 'OK', onPress: () => setIsGeneratingTodos(false) }]
+      );
+    }
+  };
   
   if (!list) {
     return (
@@ -77,6 +196,17 @@ export default function ListDetailScreen() {
       </View>
       
       {renderListTemplate()}
+      
+      {/* Todo Generation Loading Overlay */}
+      {isGeneratingTodos && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#2196F3" style={styles.loadingSpinner} />
+            <Text style={styles.loadingTitle}>Creating your list...</Text>
+            <Text style={styles.loadingMessage}>{generationMessage}</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -128,5 +258,42 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    minWidth: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  loadingSpinner: {
+    marginBottom: 16,
+  },
+  loadingTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  loadingMessage: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });
