@@ -8,12 +8,14 @@ import { useOrganization, useAuth, useUser, useClerk } from '@clerk/clerk-expo';
 import TodoList from '@/Basic';
 import ListItem from '@/components/ListItem';
 import VoiceModal from '@/components/VoiceModal';
+import ListCreationOptionsModal from '@/components/ListCreationOptionsModal';
 import { LIST_TYPE } from '@/stores/schema';
 
 export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedListId, setSelectedListId] = useState(null);
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [createModalVisible, setCreateModalVisible] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'name' | 'todos'>('name');
   const { organization } = useOrganization();
@@ -69,7 +71,7 @@ export default function HomeScreen() {
       if (!listA || !listB) return 0;
       
       if (sortBy === 'name') {
-        return listA.name.localeCompare(listB.name);
+        return String(listA.name).localeCompare(String(listB.name));
       } else {
         // Sort by todo count - get todos for each list
         const todosA = store?.getRowIds('todos')?.filter(todoId => 
@@ -116,8 +118,8 @@ export default function HomeScreen() {
   };
 
   const handleCreateList = () => {
-    const listId = addList();
-    router.push(`/(index)/list/${listId}`);
+    console.log('[index.tsx] Opening create list modal');
+    setCreateModalVisible(true);
   };
   
   const handleListPress = (listId) => {
@@ -271,6 +273,15 @@ export default function HomeScreen() {
         visible={voiceModalVisible}
         onClose={() => setVoiceModalVisible(false)}
         contextData={contextData}
+      />
+
+      {/* List Creation Options Modal */}
+      <ListCreationOptionsModal
+        visible={createModalVisible}
+        onClose={() => {
+          console.log('[index.tsx] Closing create list modal');
+          setCreateModalVisible(false);
+        }}
       />
     </SafeAreaView>
   );

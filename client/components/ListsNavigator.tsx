@@ -5,11 +5,12 @@ import PhosphorIcon from './PhosphorIcon';
 import { router } from 'expo-router';
 import { useTable, useValue, useSetValueCallback, useRowIds } from 'tinybase/ui-react';
 import TodoListItem from '@/components/TodoListItem';
+import ListCreationOptionsModal from './ListCreationOptionsModal';
 import { LIST_TYPE } from '@/stores/schema';
 
 interface ListsNavigatorProps {
   isMobile?: boolean;
-  onCreateList?: () => void;
+  onCreateList?: () => void; // Deprecated - keeping for backward compatibility
 }
 
 const ListsNavigator: React.FC<ListsNavigatorProps> = ({
@@ -17,6 +18,7 @@ const ListsNavigator: React.FC<ListsNavigatorProps> = ({
   onCreateList,
 }) => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   
   // Get data from TinyBase
@@ -131,7 +133,10 @@ const ListsNavigator: React.FC<ListsNavigatorProps> = ({
           </Pressable>
           <Pressable 
             style={styles.actionButton}
-            onPress={onCreateList}
+            onPress={() => {
+              console.log('Header plus button pressed - opening modal');
+              setIsCreateModalOpen(true);
+            }}
           >
             <PhosphorIcon name="Plus" size={20} color="#212121" weight="bold" />
           </Pressable>
@@ -183,7 +188,10 @@ const ListsNavigator: React.FC<ListsNavigatorProps> = ({
       {isMobile && (
         <TouchableOpacity 
           style={styles.fabButton}
-          onPress={onCreateList}
+          onPress={() => {
+            console.log('FAB plus button pressed - opening modal');
+            setIsCreateModalOpen(true);
+          }}
         >
           <PhosphorIcon name="Plus" size={24} color="#FFFFFF" weight="bold" />
         </TouchableOpacity>
@@ -233,6 +241,12 @@ const ListsNavigator: React.FC<ListsNavigatorProps> = ({
           </View>
         </Pressable>
       </Modal>
+
+      {/* List Creation Options Modal */}
+      <ListCreationOptionsModal
+        visible={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+      />
     </View>
   );
 };
