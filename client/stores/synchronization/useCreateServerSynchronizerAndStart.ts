@@ -46,6 +46,10 @@ export const useCreateServerSynchronizerAndStart = <
         })
       );
 
+      // IMPORTANT: Load data from server BEFORE starting sync
+      // This prevents the empty client state from overwriting server data
+      await synchronizer.load();
+
       // Start the synchronizer.
       await synchronizer.startSync();
 

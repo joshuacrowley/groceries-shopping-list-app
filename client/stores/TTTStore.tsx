@@ -6,6 +6,7 @@ import {
   createRelationships,
   createStore,
   MergeableStore,
+  TablesSchema,
 } from "tinybase";
 import {
   Provider,
@@ -58,7 +59,7 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   // Initialize main store
   const store = useCreateMergeableStore(() => {
     const newStore = createMergeableStore();
-    newStore.setTablesSchema(SCHEMA);
+    newStore.setTablesSchema(SCHEMA as TablesSchema);
     // Add initial data for a demo list if needed
     // if (!newStore.getRowIds('lists').length) {
     //   const listId = 'demo-list-' + Date.now();
@@ -205,24 +206,28 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         // Add a small delay to ensure server is ready
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        await synchronizer.startSync();
-        
-        // Force an initial load after connection
-        debugLog("Forcing initial data load...");
+        // IMPORTANT: Load data from server BEFORE starting sync
+        // This prevents the empty client state from overwriting server data
+        debugLog("Loading initial data from server...");
         await synchronizer.load();
-        await synchronizer.save();
+        
+        // Now start the sync after we have the server's data
+        debugLog("Starting synchronization...");
+        await synchronizer.startSync();
 
         // If the websocket reconnects, get a fresh token and reconnect
-        synchronizer.getWebSocket().addEventListener("open", async () => {
-          try {
-            const freshToken = await getToken();
-            if (freshToken) {
-              wsUrl.searchParams.set("token", freshToken);
-              synchronizer.load().then(() => synchronizer.save());
-            }
-          } catch (error) {
-            console.error("Error refreshing token:", error);
-          }
+        synchronizer.getWebSocket().addEventListener("open", () => {
+          debugLog("WebSocket reconnected, refreshing connection...");
+          getToken()
+            .then((freshToken) => {
+              if (freshToken) {
+                wsUrl.searchParams.set("token", freshToken);
+                return synchronizer.load().then(() => synchronizer.save());
+              }
+            })
+            .catch((error) => {
+              console.error("Error refreshing token:", error);
+            });
         });
 
         return synchronizer;
