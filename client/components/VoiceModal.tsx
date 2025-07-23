@@ -175,6 +175,7 @@ export interface VoiceResponse {
 
 interface VoiceModalProps {
   visible: boolean;
+  isRecording: boolean;
   onClose: () => void;
   contextData?: {
     lists: Record<string, any>;
@@ -182,7 +183,7 @@ interface VoiceModalProps {
   };
 }
 
-export default function VoiceModal({ visible, onClose, contextData }: VoiceModalProps) {
+export default function VoiceModal({ visible, isRecording, onClose, contextData }: VoiceModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [response, setResponse] = useState<VoiceResponse | null>(null);
   const [hasPermission, setHasPermission] = useState(false);
@@ -223,7 +224,18 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
     }
   };
 
-  // Start recording when modal opens, stop when it closes
+  // Handle recording state changes based on prop
+  useEffect(() => {
+    if (visible && isRecording && !isActivelyRecording && !isInitializing && !isProcessing) {
+      // Start recording when prop changes to true
+      startRecording();
+    } else if (visible && !isRecording && isActivelyRecording) {
+      // Stop recording when prop changes to false
+      stopRecording();
+    }
+  }, [isRecording, visible, isActivelyRecording, isInitializing, isProcessing]);
+
+  // Start/stop modal animations when visibility changes
   useEffect(() => {
     if (visible) {
       // Check permission before recording
@@ -239,9 +251,6 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
       // Reset state when opening
       setResponse(null);
       setIsProcessing(false);
-      setIsActivelyRecording(false);
-      setIsInitializing(false);
-      setRecordingStartTime(null); // Reset start time
       
       // Animate sheet sliding up
       Animated.spring(slideAnim, {
@@ -250,9 +259,6 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
         stiffness: 300,
         useNativeDriver: true,
       }).start();
-
-      // Start recording
-      startRecording();
       
       // Start pulse animation
       Animated.loop(
@@ -275,21 +281,12 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
         toValue: 0,
         duration: 250,
         useNativeDriver: true,
-      }).start();
-
-      // Stop recording if active
-      if (isActivelyRecording) {
-        stopRecording();
-      } else if (isInitializing) {
-        // User released too quickly
+      }).start(() => {
+        // Reset states after animation completes
         setIsActivelyRecording(false);
         setIsInitializing(false);
-      }
-      
-      // Reset states
-      setIsActivelyRecording(false);
-      setIsInitializing(false);
-      setRecordingStartTime(null); // Reset start time
+        setRecordingStartTime(null);
+      });
       
       // Stop pulse animation
       pulseAnim.stopAnimation();
@@ -679,6 +676,16 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
                isPreparing ? 'Getting ready...' : 
                'Voice Assistant'}
             </Text>
+            {/* Close button - show when we have a response or error */}
+            {(response || (!isListening && !isProcessing && !isPreparing)) && (
+              <Pressable 
+                style={styles.closeButton}
+                onPress={onClose}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Feather name="x" size={24} color="#6B7280" />
+              </Pressable>
+            )}
           </View>
           
           {/* Content */}
@@ -737,7 +744,13 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
             {/* Response content */}
             {response && !isProcessing && !isListening && (
               <View style={styles.responseContainer}>
-                <Text style={styles.responseText}>{response.message}</Text>
+                <View style={styles.responseHeader}>
+                  <Feather name="check-circle" size={24} color="#059669" />
+                  <Text style={styles.responseHeaderText}>Response ready</Text>
+                </View>
+                <View style={styles.responseMessageContainer}>
+                  <Text style={styles.responseText}>{response.message}</Text>
+                </View>
                 
                 {response.action && (
                   <Pressable 
@@ -853,7 +866,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingBottom: 16,
   },
@@ -861,6 +874,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#1F2937',
+    flex: 1,
+  },
+  closeButton: {
+    padding: 4,
+    marginLeft: 16,
   },
   content: {
     paddingHorizontal: 24,
@@ -908,11 +926,27 @@ const styles = StyleSheet.create({
   responseContainer: {
     paddingTop: 8,
   },
+  responseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  responseHeaderText: {
+    fontSize: 14,
+    color: '#059669',
+    fontWeight: '600',
+  },
+  responseMessageContainer: {
+    backgroundColor: '#F3F4F6',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
   responseText: {
     fontSize: 16,
     color: '#374151',
     lineHeight: 24,
-    marginBottom: 16,
   },
   actionButton: {
     backgroundColor: '#2196F3',

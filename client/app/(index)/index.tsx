@@ -18,6 +18,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedListId, setSelectedListId] = useState(null);
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'name' | 'todos'>('name');
@@ -241,6 +242,7 @@ export default function HomeScreen() {
               }).start();
               
               setVoiceModalVisible(true);
+              setIsRecording(true);
             }}
             onPressOut={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -253,7 +255,8 @@ export default function HomeScreen() {
                 bounciness: 10,
               }).start();
               
-              setVoiceModalVisible(false);
+              // Signal to stop recording but keep modal open
+              setIsRecording(false);
             }}
           >
             <Feather name="mic" size={32} color="#FFFFFF" />
@@ -358,7 +361,11 @@ export default function HomeScreen() {
       {/* Voice Modal */}
       <VoiceModal
         visible={voiceModalVisible}
-        onClose={() => setVoiceModalVisible(false)}
+        isRecording={isRecording}
+        onClose={() => {
+          setVoiceModalVisible(false);
+          setIsRecording(false);
+        }}
         contextData={contextData}
       />
 
