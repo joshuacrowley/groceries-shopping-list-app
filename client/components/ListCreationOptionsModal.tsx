@@ -84,19 +84,19 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
       
       if (source === 'camera') {
         result = await ImagePicker.launchCameraAsync({
-          mediaTypes: ['images'],
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
           aspect: [4, 3],
-          quality: 0.8,
-          base64: false, // Don't request base64 yet
+          quality: 0.3, // 0-1 scale, reduce for faster processing
+          base64: true, // Enable base64 encoding
         });
       } else {
         result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
           allowsEditing: true,
           aspect: [4, 3],
-          quality: 0.8,
-          base64: false, // Don't request base64 yet
+          quality: 0.3, // 0-1 scale, reduce for faster processing
+          base64: true, // Enable base64 encoding
         });
       }
 
@@ -111,6 +111,7 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
         
         console.log('Asset type from picker:', asset.type);
         console.log('Using MIME type:', mimeType);
+        console.log('Base64 data available:', !!asset.base64);
         
         // Close the modal
         onClose();
@@ -121,7 +122,8 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
           params: {
             photoUri: asset.uri,
             mimeType: mimeType,
-            needsBase64: 'true' // Flag to process base64 on the screen
+            base64Image: asset.base64 || '', // Pass base64 directly
+            needsBase64: 'false' // No need to process later
           }
         });
       } else {

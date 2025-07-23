@@ -13,6 +13,16 @@ import Recipes from '@/templates/Recipes';
 import RecipeCard from '@/templates/RecipeCard';
 import PhotoUploader from '@/components/PhotoUploader';
 import Constants from 'expo-constants';
+import { GoogleGenAI, Type } from '@google/genai';
+
+// Initialize Gemini with API key from environment
+const getGeminiAPI = () => {
+  const apiKey = Constants.expoConfig?.extra?.GOOGLE_AI_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Google AI API key not found. Please set EXPO_PUBLIC_GOOGLE_AI_API_KEY in your environment.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export default function ListDetailScreen() {
   const { 
@@ -65,47 +75,88 @@ export default function ListDetailScreen() {
       setIsGeneratingTodos(true);
       setGenerationMessage('Analyzing your photo and creating todos...');
       
-      // Determine API URL
-      let apiBaseUrl = '';
-      if (__DEV__) {
-        const bundleUrl = Constants.experienceUrl;
-        if (bundleUrl) {
-          try {
-            const url = new URL(bundleUrl);
-            apiBaseUrl = `http://${url.hostname}:8081`;
-          } catch (e) {
-            apiBaseUrl = 'http://localhost:8081';
-          }
-        }
+      console.log('Generating todos on device...');
+      
+      // Add polyfill for React Native if needed
+      if (typeof global.process === 'undefined') {
+        global.process = {
+          env: {},
+          version: '',
+        } as any;
       }
       
-      const requestBody = {
-        systemPrompt: systemPrompt || list.systemPrompt || '',
-        description: list.purpose || '',
-        listName: list.name,
-        listType: list.type,
-        template: templateId || list.template,
-        photoData: photoAnalysis || '',
-        fromVoice: 'false',
-        fromPhoto: fromPhoto || 'false'
+      // Define the response schema for structured output
+      const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          todos: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                text: {
+                  type: Type.STRING,
+                  description: "The main text/title of the todo item"
+                },
+                notes: {
+                  type: Type.STRING,
+                  description: "Additional notes or details about the todo"
+                },
+                emoji: {
+                  type: Type.STRING,
+                  description: "A relevant emoji for the todo"
+                },
+                category: {
+                  type: Type.STRING,
+                  description: "The category or grouping for the todo"
+                },
+                type: {
+                  type: Type.STRING,
+                  description: "Priority type (A-E)"
+                },
+                done: {
+                  type: Type.BOOLEAN,
+                  description: "Whether the todo is completed"
+                }
+              },
+              required: ["text", "done"],
+              propertyOrdering: ["text", "notes", "emoji", "category", "type", "done"]
+            }
+          }
+        },
+        required: ["todos"],
+        propertyOrdering: ["todos"]
       };
       
-      console.log('Generating todos with:', requestBody);
+      // Build the prompt based on list information
+      const prompt = `You are a helpful assistant generating todos for a list.
+    
+List Information:
+- List Name: "${list.name}"
+- List Purpose: "${list.purpose}"
+- List Template: "${templateId || list.template}"
+- Special Instructions: "${systemPrompt || list.systemPrompt || ''}"
+
+Generate relevant, specific, and contextual todo items that match the style and purpose of the current list.
+
+${photoAnalysis ? `Context from photo: ${photoAnalysis}` : ''}`;
+
+      const genAI = getGeminiAPI();
       
-      const response = await fetch(`${apiBaseUrl}/api/generate-todos`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
+      const response = await genAI.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ text: prompt }],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: responseSchema
+        }
       });
       
-      if (!response.ok) {
-        throw new Error(`Failed to generate todos: ${response.status}`);
-      }
+      // Get the response text directly - it will be valid JSON due to structured output
+      const text = response.text;
+      console.log('Generated todos:', text);
       
-      const result = await response.json();
-      console.log('Generated todos:', result);
+      const result = JSON.parse(text);
       
       if (result.todos && result.todos.length > 0) {
         setGenerationMessage(`Adding ${result.todos.length} todos to your list...`);

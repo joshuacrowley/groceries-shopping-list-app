@@ -14,9 +14,12 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import Constants from 'expo-constants';
 import { createChatContextGenerator } from '../app/api/chatContext';
+import PhosphorIcon from './PhosphorIcon';
+import { useThemeColor } from '@/hooks/useThemeColor';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { 
   useAudioRecorder, 
   useAudioRecorderState, 
@@ -65,15 +68,157 @@ const callGeminiVoiceAPI = async (
   
   const xmlContext = contextGenerator.getSystemMessage();
 
-  // Simplified prompt for testing
-  const prompt = `You are a helpful assistant. Please transcribe what the user said in the audio and respond naturally. 
-  
-  For context, here are the available lists: ${Object.values(contextData?.lists || {}).map((list: any) => list.name).join(', ')}`;
+  // Create the full prompt with XML context and structured output instructions
+  const prompt = `You are a helpful voice assistant for a shopping list app. Listen to the user's audio and help them by answering their questions using the information in their lists and todos.
+
+${xmlContext}
+
+INSTRUCTIONS:
+1. First, transcribe what the user said in the audio
+2. Treat the user's input as a QUESTION that needs an answer
+3. Search through the todos FIRST to find specific items that answer their question
+4. If no specific todo answers the question, look for relevant lists
+5. Provide a natural, conversational response that directly answers their question
+6. Return ONLY valid JSON (no markdown, no code blocks, no extra text)
+
+PRIORITY ORDER:
+1. If the user asks a question (e.g., "What's for dinner?"), find the SPECIFIC TODO that answers it
+2. If multiple todos might answer, pick the most relevant one
+3. If no specific todo answers the question, show the most relevant list
+4. Only use navigation/create actions for explicit requests
+
+Your response must be pure JSON in this format:
+{
+  "message": "A natural answer to their question, mentioning the specific item or list found",
+  "action": {
+    "type": "action_type",
+    "target": "list_id, todo_id, or route",
+    "data": {}
+  }
+}
+
+Action types and their data:
+- "show_todo": Show a specific todo that answers their question
+  - target: The list ID containing the todo
+  - data: { "todoId": "todo_id", "todoText": "todo text", "listId": "list_id", "listName": "list name" }
+
+- "show_list": Show a list when no specific todo answers the question
+  - target: The list ID from the XML
+  - data: { "listName": "human-readable name" }
+
+- "add_todo": Add item to a list (only for explicit add requests)
+  - target: The list ID
+  - data: { "text": "item name", "listId": "list_id", "listName": "list name", "category": "optional category" }
+
+- "navigate": Navigate to a route (only for explicit navigation requests)
+  - target: Route path (e.g., "/lists", "/profile")
+  - data: {} (empty)
+
+- "create_list": Create new list (only for explicit create requests)
+  - target: null
+  - data: { "name": "list name", "template": "optional template name" }
+
+Examples:
+- User: "What's for dinner tonight?" → Find todo "Chicken Parmesan" in "Meal Plan" list → 
+  Response: { "message": "For dinner tonight, you have Chicken Parmesan planned.", "action": { "type": "show_todo", "target": "meal-plan-list-id", "data": { "todoId": "todo-123", "todoText": "Chicken Parmesan", "listId": "meal-plan-list-id", "listName": "Meal Plan" } } }
+
+- User: "Do I need milk?" → Search todos for "milk" → 
+  Response: { "message": "Yes, milk is on your Grocery list.", "action": { "type": "show_todo", "target": "grocery-list-id", "data": { "todoId": "todo-456", "todoText": "Milk", "listId": "grocery-list-id", "listName": "Grocery" } } }
+
+- User: "What do I need to buy?" → No specific item, show relevant list →
+  Response: { "message": "Here's your shopping list with 5 items to buy.", "action": { "type": "show_list", "target": "shopping-list-id", "data": { "listName": "Shopping" } } }
+
+Remember: Always try to ANSWER THE QUESTION with specific information. Output ONLY valid JSON, nothing else.`;
 
   console.log("[VoiceModal] Making request to Gemini API...");
   console.log("[VoiceModal] Using model: gemini-2.0-flash-001");
+  console.log("[VoiceModal] Context lists:", Object.keys(contextData?.lists || {}).length);
+  console.log("[VoiceModal] Context todos:", Object.keys(contextData?.todos || {}).length);
 
   try {
+    // Define the response schema for structured output
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        message: {
+          type: Type.STRING,
+          description: "The response message to show to the user"
+        },
+        action: {
+          type: Type.OBJECT,
+          nullable: true,
+          properties: {
+            type: {
+              type: Type.STRING,
+              enum: ["show_list", "show_todo", "create_todo", "mark_done", "mark_undone"]
+            },
+            target: {
+              type: Type.STRING,
+              description: "The list ID or todo ID to target"
+            },
+                    data: {
+          type: Type.OBJECT,
+          nullable: true,
+          description: "Additional data for the action",
+          properties: {
+            // For todos
+            todoId: {
+              type: Type.STRING,
+              nullable: true
+            },
+            todoText: {
+              type: Type.STRING,
+              nullable: true
+            },
+            text: {
+              type: Type.STRING,
+              nullable: true
+            },
+            notes: {
+              type: Type.STRING,
+              nullable: true
+            },
+            category: {
+              type: Type.STRING,
+              nullable: true
+            },
+            // For lists
+            listId: {
+              type: Type.STRING,
+              nullable: true
+            },
+            listName: {
+              type: Type.STRING,
+              nullable: true
+            },
+            // For create_list
+            template: {
+              type: Type.STRING,
+              nullable: true
+            },
+            name: {
+              type: Type.STRING,
+              nullable: true
+            },
+            purpose: {
+              type: Type.STRING,
+              nullable: true
+            },
+            // Generic fields
+            itemName: {
+              type: Type.STRING,
+              nullable: true
+            }
+          }
+        }
+          },
+          required: ["type", "target"]
+        }
+      },
+      required: ["message"],
+      propertyOrdering: ["message", "action"]
+    };
+    
     // Log the full request details
     const requestData = {
       model: modelName,
@@ -90,6 +235,10 @@ const callGeminiVoiceAPI = async (
           ]
         }
       ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: responseSchema
+      }
     };
     
     console.log("[VoiceModal] Request structure:", JSON.stringify({
@@ -106,16 +255,22 @@ const callGeminiVoiceAPI = async (
     // Make the actual request with the new API pattern
     const response = await genAI.models.generateContent(requestData);
 
-    // Get the response text directly
+    // Get the response text directly - it will be valid JSON due to structured output
     const text = response.text;
     
-    console.log("[VoiceModal] Gemini response:", text);
+    console.log("[VoiceModal] Gemini structured response:", text);
     
-    // For now, just return the text as a message (testing phase)
+    // Parse the JSON response directly
+    const parsedResponse = JSON.parse(text);
+    
+    console.log("[VoiceModal] Parsed response:", parsedResponse);
+    
+    // Return the structured response
     return {
-      message: text || "I couldn't understand the audio. Please try again.",
-      action: null
+      message: parsedResponse.message,
+      action: parsedResponse.action || null
     };
+
   } catch (error) {
     console.error("[VoiceModal] Gemini API error:", error);
     
@@ -149,17 +304,19 @@ const callGeminiVoiceAPI = async (
 export interface VoiceResponse {
   message: string;
   action?: {
-    type: 'navigate' | 'show_list' | 'show_items' | 'add_todo' | 'update_todo' | 'delete_todo' | 'create_list';
+    type: 'navigate' | 'show_list' | 'show_items' | 'show_todo' | 'add_todo' | 'update_todo' | 'delete_todo' | 'create_list';
     target?: string;
     data?: {
-      // For add_todo action
+      // For todos
+      todoId?: string;
+      todoText?: string;
       text?: string;
       notes?: string;
       category?: string;
-      listId?: string;
       
-      // For update_todo/delete_todo
-      todoId?: string;
+      // For lists
+      listId?: string;
+      listName?: string;
       
       // For create_list
       template?: string;
@@ -168,7 +325,6 @@ export interface VoiceResponse {
       
       // Generic fields
       itemName?: string;
-      listName?: string;
     };
   };
 }
@@ -193,6 +349,12 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
   const slideAnim = useRef(new Animated.Value(0)).current;
   const volumeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  
+  // Theme colors
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const textColor = useThemeColor({}, 'text');
+  const iconColor = useThemeColor({}, 'icon');
 
   // Audio recording setup with high quality settings
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -545,14 +707,28 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
           router.push(`/(index)/list/${action.target}`);
         }
         break;
+      case 'show_todo':
+        if (action.target && action.data?.todoId) {
+          onClose();
+          // Navigate to the list containing the todo
+          router.push(`/(index)/list/${action.target}`);
+          // In a future implementation, you could highlight or scroll to the specific todo
+        }
+        break;
       case 'add_todo':
-        // For now, show what would be added
-        Alert.alert(
-          'Add Todo',
-          `Would add "${action.data?.text || action.data?.itemName}" to ${action.data?.listName || 'the list'}`,
-          [{ text: 'OK' }]
-        );
-        // TODO: Integrate with actual add_todo tool
+        if (action.data?.listId) {
+          // Navigate to the list where the todo would be added
+          onClose();
+          router.push(`/(index)/list/${action.data.listId}`);
+          // In a real implementation, you'd also trigger the add todo action
+          // For now, just navigate to the list
+        } else {
+          Alert.alert(
+            'Add Todo',
+            `Would add "${action.data?.text || action.data?.itemName}" to ${action.data?.listName || 'the list'}`,
+            [{ text: 'OK' }]
+          );
+        }
         break;
       case 'update_todo':
         Alert.alert(
@@ -592,9 +768,11 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
         return 'Go There';
       case 'show_list':
       case 'show_items':
-        return 'View List';
+        return 'Open List';
+      case 'show_todo':
+        return 'View in List';
       case 'add_todo':
-        return 'Add Todo';
+        return 'Add to List';
       case 'update_todo':
         return 'Update Todo';
       case 'delete_todo':
@@ -613,7 +791,13 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
 
   // Calculate content height based on state
   const getContentHeight = () => {
-    if (response) return 300;
+    if (response) {
+      // Extra height for visual representations
+      if (response.action && (response.action.type === 'show_list' || response.action.type === 'show_items' || response.action.type === 'add_todo' || response.action.type === 'show_todo')) {
+        return 380;
+      }
+      return 300;
+    }
     if (isProcessing) return 220;
     return 240; // Compact height for listening
   };
@@ -752,6 +936,71 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
                   <Text style={styles.responseText}>{response.message}</Text>
                 </View>
                 
+                {/* Visual representation based on action type */}
+                {response.action && (response.action.type === 'show_list' || response.action.type === 'show_items') && response.action.target && (
+                  <View style={styles.visualContainer}>
+                    {(() => {
+                      const list = contextData?.lists[response.action.target];
+                      if (!list) return null;
+                      
+                      const colorMap = {
+                        blue: '#2196F3',
+                        green: '#4CAF50',
+                        red: '#F44336',
+                        yellow: '#FFC107',
+                        purple: '#9C27B0',
+                        teal: '#009688',
+                        gray: '#757575',
+                        orange: '#FF9800',
+                        pink: '#E91E63',
+                        cyan: '#00BCD4',
+                      };
+                      
+                      const bgColor = colorMap[list.backgroundColour as keyof typeof colorMap] || '#2196F3';
+                      
+                      return (
+                        <View style={[styles.listPreview, { backgroundColor: isDark ? bgColor + '20' : bgColor + '10' }]}>
+                          <View style={[styles.listIconPreview, { backgroundColor: bgColor }]}>
+                            <PhosphorIcon 
+                              name={(list.icon || 'ClipboardText') as string} 
+                              size={20} 
+                              color="#FFFFFF" 
+                            />
+                          </View>
+                          <Text style={[styles.listNamePreview, { color: isDark ? '#FFFFFF' : '#1F2937' }]}>
+                            {list.name}
+                          </Text>
+                        </View>
+                      );
+                    })()}
+                  </View>
+                )}
+                
+                {/* Todo visual representation - for both show_todo and add_todo */}
+                {response.action && (response.action.type === 'add_todo' || response.action.type === 'show_todo') && response.action.data && (
+                  <View style={styles.visualContainer}>
+                    <View style={[styles.todoPreview, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6' }]}>
+                      <View style={[
+                        styles.todoCheckbox, 
+                        { 
+                          borderColor: isDark ? '#666' : '#D1D5DB',
+                          backgroundColor: response.action.type === 'show_todo' ? 'transparent' : 'transparent'
+                        }
+                      ]} />
+                      <View style={styles.todoContent}>
+                        <Text style={[styles.todoText, { color: isDark ? '#FFFFFF' : '#1F2937' }]}>
+                          {response.action.data.todoText || response.action.data.text || response.action.data.itemName}
+                        </Text>
+                        {response.action.data.listName && (
+                          <Text style={[styles.todoListName, { color: isDark ? 'rgba(255,255,255,0.6)' : '#6B7280' }]}>
+                            {response.action.type === 'show_todo' ? 'from' : 'in'} {response.action.data.listName}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                )}
+                
                 {response.action && (
                   <Pressable 
                     style={styles.actionButton} 
@@ -766,66 +1015,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
               </View>
             )}
             
-            {/* Debug: Test with sample audio */}
-            {__DEV__ && (
-              <>
-                <Pressable
-                  style={[styles.debugButton, { marginTop: 20 }]}
-                  onPress={async () => {
-                    try {
-                      setIsProcessing(true);
-                      
-                      // Test with a simple base64 encoded audio
-                      // This is a very short silent audio for testing
-                      const testAudioBase64 = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
-                      
-                      const result = await callGeminiVoiceAPI(
-                        testAudioBase64,
-                        'audio/wav',
-                        contextData
-                      );
-                      
-                      setResponse(result);
-                    } catch (error) {
-                      console.error('[VoiceModal] Test audio error:', error);
-                      Alert.alert('Test Error', error.message);
-                    } finally {
-                      setIsProcessing(false);
-                    }
-                  }}
-                >
-                  <Text style={styles.debugButtonText}>Test with Sample Audio</Text>
-                </Pressable>
-                
-                <Pressable
-                  style={[styles.debugButton, { marginTop: 10, backgroundColor: '#2196F3' }]}
-                  onPress={async () => {
-                    try {
-                      setIsProcessing(true);
-                      
-                      // Test with text-only to verify API key works
-                      const genAI = getGeminiAPI();
-                      const response = await genAI.models.generateContent({
-                        model: 'gemini-2.0-flash-001',
-                        contents: [{ parts: [{ text: 'Say hello in 5 words' }] }]
-                      });
-                      
-                      setResponse({
-                        message: response.text || 'No response from API',
-                        action: null
-                      });
-                    } catch (error) {
-                      console.error('[VoiceModal] Test text error:', error);
-                      Alert.alert('API Test Error', error.message);
-                    } finally {
-                      setIsProcessing(false);
-                    }
-                  }}
-                >
-                  <Text style={styles.debugButtonText}>Test Text-Only API</Text>
-                </Pressable>
-              </>
-            )}
+
           </View>
         </Animated.View>
       </KeyboardAvoidingView>
@@ -963,17 +1153,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  debugButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
+  visualContainer: {
+    marginVertical: 12,
   },
-  debugButtonText: {
-    color: '#FFFFFF',
+  listPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  listIconPreview: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  listNamePreview: {
+    fontSize: 16,
     fontWeight: '600',
-    fontSize: 14,
+    flex: 1,
+  },
+  todoPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    gap: 12,
+  },
+  todoCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+  },
+  todoContent: {
+    flex: 1,
+  },
+  todoText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  todoListName: {
+    fontSize: 12,
+    marginTop: 2,
   },
 });

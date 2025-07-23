@@ -17,7 +17,7 @@ import {
   useRow,
 } from "tinybase/ui-react";
 import { chakraColors, spacing, radii } from '@/constants/Colors';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import Constants from 'expo-constants';
 
 // Initialize Gemini with API key from environment
@@ -39,6 +39,49 @@ const callGeminiAPI = async (
   console.log("Initializing Gemini API...");
   const genAI = getGeminiAPI();
 
+  // Define the response schema for structured output
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      todos: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            text: {
+              type: Type.STRING,
+              description: "The main text of the todo item"
+            },
+            notes: {
+              type: Type.STRING,
+              description: "Additional notes about the todo"
+            },
+            emoji: {
+              type: Type.STRING,
+              description: "A relevant emoji for the todo"
+            },
+            category: {
+              type: Type.STRING,
+              description: "The category of the todo"
+            },
+            type: {
+              type: Type.STRING,
+              description: "The type of the todo (A-E)"
+            },
+            done: {
+              type: Type.BOOLEAN,
+              description: "Whether the todo is completed"
+            }
+          },
+          required: ["text", "done"],
+          propertyOrdering: ["text", "notes", "emoji", "category", "type", "done"]
+        }
+      }
+    },
+    required: ["todos"],
+    propertyOrdering: ["todos"]
+  };
+
   const prompt = `Analyze this image and create todo items based on it.
   Current List Information:
   - List Name: "${listInfo.name}"
@@ -48,21 +91,7 @@ const callGeminiAPI = async (
   
   To help you understand the schema of a todo for this list, here's the current todos: ${JSON.stringify(currentTodos)}
   Generate relevant, specific, and contextual todo items that match the style and purpose of the current list.
-  Please only provide the new todos, not the existing todos provided for context.
-  
-  Respond with JSON in this exact format:
-  {
-    "todos": [
-      {
-        "text": "The main text of the todo item",
-        "notes": "Additional notes about the todo",
-        "emoji": "A relevant emoji for the todo",
-        "category": "The category of the todo",
-        "type": "The type of the todo (A-E)",
-        "done": false
-      }
-    ]
-  }`;
+  Please only provide the new todos, not the existing todos provided for context.`;
 
   console.log("Making request to Gemini API...");
 
@@ -80,21 +109,21 @@ const callGeminiAPI = async (
     const response = await genAI.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: contents,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: responseSchema
+      }
     });
 
-    // Get the response text directly
+    // Get the response text directly - it will be valid JSON due to structured output
     const text = response.text;
     
     console.log("Gemini response received");
+    console.log("Structured response:", text);
     
-    try {
-      const parsedResponse = JSON.parse(text);
-      return parsedResponse;
-    } catch (parseError) {
-      console.error("Failed to parse JSON response:", parseError);
-      console.log("Raw response:", text);
-      throw new Error("Failed to parse API response");
-    }
+    // Parse the JSON response directly
+    const parsedResponse = JSON.parse(text);
+    return parsedResponse;
   } catch (error) {
     console.error("Gemini API error:", error);
     throw error;
@@ -219,11 +248,11 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
       console.log("Launching image library...");
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
-        base64: false,
+        quality: 0.3, // Reduce quality for faster processing
+        base64: true, // Enable base64 encoding
       });
 
       console.log("Image library result:", result);
@@ -246,7 +275,10 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
     
     try {
       console.log("Calling handlePhotoSelected with URI:", asset.uri);
-      await handlePhotoSelected(asset.uri, asset.mimeType || 'image/jpeg');
+      console.log("Base64 data available:", !!asset.base64);
+      
+      // Pass the base64 data directly if available
+      await handlePhotoSelected(asset.uri, asset.mimeType || 'image/jpeg', asset.base64);
     } catch (error) {
       console.error("Error processing image:", error);
       Alert.alert(
@@ -274,15 +306,16 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
   };
 
   const handlePhotoSelected = useCallback(
-    async (uri: string, mimeType: string) => {
+    async (uri: string, mimeType: string, base64Data?: string) => {
       console.log("Platform:", Platform.OS);
+      console.log("Base64 data provided:", !!base64Data);
       
       const currentTodos = todoIds
         .slice(0, 5)
         .map((id) => store.getRow("todos", id));
 
       try {
-        const base64Image = await convertUriToBase64(uri);
+        const base64Image = base64Data || await convertUriToBase64(uri);
         
         console.log("Calling Google Gemini API directly...");
         

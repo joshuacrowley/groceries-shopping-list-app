@@ -6,7 +6,7 @@ import Constants from 'expo-constants';
 import catalogue from '../../../../catalogue.json';
 import { useStore } from 'tinybase/ui-react';
 import { getUniqueId } from 'tinybase';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 
 // Initialize Gemini with API key from environment
 const getGeminiAPI = () => {
@@ -19,16 +19,17 @@ const getGeminiAPI = () => {
 
 // Helper function to get available templates
 const getAvailableTemplates = () => {
-  const templates = Object.keys(catalogue)
-    .filter(key => 
-      catalogue[key].code && 
-      catalogue[key].code.trim() !== '' && 
-      catalogue[key].code !== 'Basic'
+  const templates = catalogue
+    .filter(item => 
+      item.template && 
+      item.template.trim() !== '' && 
+      item.template !== 'Basic' &&
+      item.published !== false
     )
-    .map(key => ({
-      name: catalogue[key].code,
-      label: catalogue[key].display || catalogue[key].name,
-      description: catalogue[key].type || 'No description available'
+    .map(item => ({
+      name: item.template,
+      label: item.name || item.template,
+      description: item.purpose || item.type || 'No description available'
     }));
   
   console.log('Available templates:', templates);
@@ -67,13 +68,16 @@ export default function PhotoAnalysisScreen() {
   const [base64Image, setBase64Image] = useState<string>(params.base64Image as string || '');
 
   useEffect(() => {
-    if (needsBase64 && photoUri) {
+    if (params.base64Image) {
+      // If we already have base64 from the image picker, use it directly
+      analyzePhotoForTemplates(params.base64Image as string);
+    } else if (needsBase64 && photoUri) {
       // Process base64 after navigation
       processBase64FromUri();
     } else if (base64Image) {
       analyzePhotoForTemplates();
     }
-  }, [needsBase64, photoUri, base64Image]);
+  }, [needsBase64, photoUri, base64Image, params.base64Image]);
 
   // Animate loading text
   useEffect(() => {
@@ -135,9 +139,62 @@ export default function PhotoAnalysisScreen() {
       console.log('Starting photo analysis with direct Gemini call...');
       console.log('Using model: gemini-2.5-flash');
       
+      // Add polyfill for React Native if needed
+      if (typeof global.process === 'undefined') {
+        global.process = {
+          env: {},
+          version: '',
+        } as any;
+      }
+      
       const genAI = getGeminiAPI();
 
       const availableTemplates = getAvailableTemplates();
+      
+      // Define the response schema for structured output
+      const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          analysis: {
+            type: Type.STRING,
+            description: "Brief description of what you see in the photo"
+          },
+          suggestedTemplates: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                templateId: {
+                  type: Type.STRING,
+                  description: "Exact template name from the available list"
+                },
+                confidence: {
+                  type: Type.NUMBER,
+                  description: "Confidence score from 0 to 100"
+                },
+                reasoning: {
+                  type: Type.STRING,
+                  description: "Why this template matches the content"
+                },
+                suggestedName: {
+                  type: Type.STRING,
+                  description: "Suggested name for the list"
+                },
+                suggestedIcon: {
+                  type: Type.STRING,
+                  description: "Emoji icon for the list"
+                }
+              },
+              required: ["templateId", "confidence", "reasoning", "suggestedName"],
+              propertyOrdering: ["templateId", "confidence", "reasoning", "suggestedName", "suggestedIcon"]
+            },
+            minItems: 1,
+            maxItems: 3
+          }
+        },
+        required: ["analysis", "suggestedTemplates"],
+        propertyOrdering: ["analysis", "suggestedTemplates"]
+      };
       
       const prompt = `You are an AI assistant that analyzes photos to suggest the best template for creating a structured list. 
 
@@ -153,21 +210,6 @@ ANALYSIS INSTRUCTIONS:
    - Content type and structure
    - Intended use case
    - Organization needs
-
-RESPONSE FORMAT:
-Please respond with JSON in this exact format:
-{
-  "analysis": "Brief description of what you see",
-  "suggestedTemplates": [
-    {
-      "templateId": "exact template name from list",
-      "confidence": 85,
-      "reasoning": "Why this template matches",
-      "suggestedName": "My Suggested List Name",
-      "suggestedIcon": "🎯"
-    }
-  ]
-}
 
 Focus on practical utility - choose templates that would actually help the user organize the content they photographed.`;
 
@@ -187,69 +229,34 @@ Focus on practical utility - choose templates that would actually help the user 
       const response = await genAI.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: contents,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: responseSchema
+        }
       });
 
-      // Get the response text directly
+      // Get the response text directly - it will be valid JSON due to structured output
       const text = response.text;
       
       console.log('Gemini response received');
+      console.log('Structured response:', text);
       
-      try {
-        const parsedResponse = JSON.parse(text);
-        
-        // Validate and enrich the suggestions with full template data
-        const enrichedSuggestions = parsedResponse.suggestedTemplates
-          .map((suggestion: any) => {
-            const template = availableTemplates.find(t => t.name === suggestion.templateId);
-            if (!template) return null;
-            
-            // Find the full catalogue entry
-            const catalogueKey = Object.keys(catalogue).find(key => catalogue[key].code === template.name);
-            const fullTemplate = catalogueKey ? catalogue[catalogueKey] : null;
-            
-            return {
-              ...suggestion,
-              templateData: fullTemplate ? {
-                id: fullTemplate.template || template.name,
-                name: fullTemplate.name || template.label,
-                purpose: fullTemplate.purpose || template.description,
-                type: fullTemplate.type || 'General',
-                icon: fullTemplate.icon || '📝',
-                backgroundColour: fullTemplate.backgroundColour || 'blue'
-              } : {
-                id: template.name,
-                name: template.label,
-                purpose: template.description,
-                type: 'General',
-                icon: '📝',
-                backgroundColour: 'blue'
-              }
-            };
-          })
-          .filter(Boolean)
-          .slice(0, 3);
-
-        setAnalysis(parsedResponse.analysis);
-        setSuggestions(enrichedSuggestions);
-        setIsAnalyzing(false);
-      } catch (parseError) {
-        console.error('Failed to parse response:', parseError);
-        console.log('Raw response:', text);
-        
-        // Fallback to generic suggestions
-        const fallbackTemplates = availableTemplates.slice(0, 3);
-        setSuggestions(fallbackTemplates.map((template, index) => {
-          const catalogueKey = Object.keys(catalogue).find(key => catalogue[key].code === template.name);
-          const fullTemplate = catalogueKey ? catalogue[catalogueKey] : null;
+      // Parse the JSON response - no need to extract from markdown blocks
+      const parsedResponse = JSON.parse(text);
+      
+      // Validate and enrich the suggestions with full template data
+      const enrichedSuggestions = parsedResponse.suggestedTemplates
+        .map((suggestion: any) => {
+          const template = availableTemplates.find(t => t.name === suggestion.templateId);
+          if (!template) return null;
+          
+          // Find the full catalogue entry
+          const fullTemplate = catalogue.find(item => item.template === suggestion.templateId);
           
           return {
-            templateId: template.name,
-            confidence: 70 - (index * 10),
-            reasoning: `${template.name} is a versatile template for ${template.description}`,
-            suggestedName: "My Photo List",
-            suggestedIcon: '📝',
+            ...suggestion,
             templateData: fullTemplate ? {
-              id: fullTemplate.template || template.name,
+              id: fullTemplate.template,
               name: fullTemplate.name || template.label,
               purpose: fullTemplate.purpose || template.description,
               type: fullTemplate.type || 'General',
@@ -264,11 +271,13 @@ Focus on practical utility - choose templates that would actually help the user 
               backgroundColour: 'blue'
             }
           };
-        }));
-        
-        setAnalysis("I analyzed your photo and found some suitable templates for you.");
-        setIsAnalyzing(false);
-      }
+        })
+        .filter(Boolean)
+        .slice(0, 3);
+
+      setAnalysis(parsedResponse.analysis);
+      setSuggestions(enrichedSuggestions);
+      setIsAnalyzing(false);
 
     } catch (error: any) {
       console.error('Error analyzing photo:', error);
@@ -278,11 +287,101 @@ Focus on practical utility - choose templates that would actually help the user 
         stack: error.stack
       });
       
+      // Check if it's a network error from the SDK
+      if (error.message?.includes('Network request failed')) {
+        console.log('SDK network error detected, trying direct API call...');
+        
+        // Fallback to direct API call
+        try {
+          const apiKey = Constants.expoConfig?.extra?.GOOGLE_AI_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+          
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: mimeType,
+                      data: dataToAnalyze
+                    }
+                  },
+                  {
+                    text: prompt
+                  }
+                ]
+              }],
+              generationConfig: {
+                temperature: 0.7,
+                topK: 1,
+                topP: 1,
+                maxOutputTokens: 2048,
+              },
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`API request failed: ${response.status}`);
+          }
+
+          const data = await response.json();
+          const text = data.candidates[0]?.content?.parts[0]?.text;
+          
+          if (text) {
+            // Process the response as before
+            try {
+              const parsedResponse = JSON.parse(text);
+              
+              // Validate and enrich the suggestions with full template data
+              const enrichedSuggestions = parsedResponse.suggestedTemplates
+                .map((suggestion: any) => {
+                  const template = availableTemplates.find(t => t.name === suggestion.templateId);
+                  if (!template) return null;
+                  
+                  const fullTemplate = catalogue.find(item => item.template === suggestion.templateId);
+                  
+                  return {
+                    ...suggestion,
+                    templateData: fullTemplate ? {
+                      id: fullTemplate.template,
+                      name: fullTemplate.name || template.label,
+                      purpose: fullTemplate.purpose || template.description,
+                      type: fullTemplate.type || 'General',
+                      icon: fullTemplate.icon || '📝',
+                      backgroundColour: fullTemplate.backgroundColour || 'blue'
+                    } : {
+                      id: template.name,
+                      name: template.label,
+                      purpose: template.description,
+                      type: 'General',
+                      icon: '📝',
+                      backgroundColour: 'blue'
+                    }
+                  };
+                })
+                .filter(Boolean)
+                .slice(0, 3);
+
+              setAnalysis(parsedResponse.analysis);
+              setSuggestions(enrichedSuggestions);
+              setIsAnalyzing(false);
+              return; // Success with fallback
+            } catch (parseError) {
+              console.error('Failed to parse fallback response:', parseError);
+            }
+          }
+        } catch (fallbackError) {
+          console.error('Fallback API call also failed:', fallbackError);
+        }
+      }
+      
       let errorMessage = 'Failed to analyze photo. Please try again.';
       
-      if (error.message?.includes('Network request failed')) {
-        errorMessage = 'Network error. Please check your internet connection.';
-      } else if (error.message?.includes('timeout')) {
+      if (error.message?.includes('timeout')) {
         errorMessage = 'Request timed out. Please try again.';
       } else if (error.message?.includes('API key')) {
         errorMessage = 'API configuration error. Please check your settings.';
@@ -296,8 +395,7 @@ Focus on practical utility - choose templates that would actually help the user 
       const fallbackTemplates = availableTemplates.slice(0, 3);
       
       setSuggestions(fallbackTemplates.map((template, index) => {
-        const catalogueKey = Object.keys(catalogue).find(key => catalogue[key].code === template.name);
-        const fullTemplate = catalogueKey ? catalogue[catalogueKey] : null;
+        const fullTemplate = catalogue.find(item => item.template === template.name);
         
         return {
           templateId: template.name,
@@ -306,7 +404,7 @@ Focus on practical utility - choose templates that would actually help the user 
           suggestedName: "My Photo List",
           suggestedIcon: '📝', // Default icon for fallback
           templateData: fullTemplate ? {
-            id: fullTemplate.template || template.name,
+            id: fullTemplate.template,
             name: fullTemplate.name || template.label,
             purpose: fullTemplate.purpose || template.description,
             type: fullTemplate.type || 'General',
@@ -386,7 +484,7 @@ Focus on practical utility - choose templates that would actually help the user 
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <PhosphorIcon name="ArrowLeft" size={24} color="#1F2937" weight="bold" />
         </Pressable>
-        <Text style={styles.title}>Smart Template Suggestions</Text>
+        <Text style={styles.title}>Template Recommendations</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -405,14 +503,6 @@ Focus on practical utility - choose templates that would actually help the user 
           </View>
         ) : (
           <>
-            {/* Analysis */}
-            {analysis && (
-              <View style={styles.analysisContainer}>
-                <Text style={styles.analysisTitle}>What we found:</Text>
-                <Text style={styles.analysisText}>{analysis}</Text>
-              </View>
-            )}
-
             {/* Error message */}
             {error && (
               <View style={styles.errorContainer}>
@@ -421,79 +511,77 @@ Focus on practical utility - choose templates that would actually help the user 
             )}
 
             {/* Template Suggestions */}
-            <View style={styles.suggestionsContainer}>
-              <Text style={styles.suggestionsTitle}>Recommended templates:</Text>
-              
-              {suggestions.map((suggestion, index) => (
-                <Pressable
-                  key={suggestion.templateId}
-                  style={[
-                    styles.suggestionCard,
-                    index === 0 && styles.topSuggestion
-                  ]}
-                  onPress={() => handleTemplateSelect(suggestion)}
-                >
-                  <View style={styles.suggestionHeader}>
-                    <View style={styles.templateInfo}>
-                      <View style={styles.templateIconContainer}>
-                        {/* Check if it's an emoji or icon name */}
-                        {(suggestion.suggestedIcon && suggestion.suggestedIcon.length <= 2) || 
-                         (suggestion.templateData.icon && suggestion.templateData.icon.length <= 2) ? (
-                          <Text style={styles.templateEmoji}>
-                            {suggestion.suggestedIcon || suggestion.templateData.icon}
+            {suggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                <Text style={styles.suggestionsTitle}>Choose a template for your list:</Text>
+                
+                {suggestions.map((suggestion, index) => (
+                  <Pressable
+                    key={suggestion.templateId}
+                    style={[
+                      styles.suggestionCard,
+                      index === 0 && styles.topSuggestion
+                    ]}
+                    onPress={() => handleTemplateSelect(suggestion)}
+                  >
+                    <View style={styles.suggestionHeader}>
+                      <View style={styles.templateInfo}>
+                        <View style={styles.templateIconContainer}>
+                          {/* Check if it's an emoji or icon name */}
+                          {(suggestion.suggestedIcon && suggestion.suggestedIcon.length <= 2) || 
+                           (suggestion.templateData.icon && suggestion.templateData.icon.length <= 2) ? (
+                            <Text style={styles.templateEmoji}>
+                              {suggestion.suggestedIcon || suggestion.templateData.icon}
+                            </Text>
+                          ) : (
+                            <PhosphorIcon 
+                              name={suggestion.templateData.icon || 'ListChecks'} 
+                              size={28} 
+                              color="#374151" 
+                              weight="duotone"
+                            />
+                          )}
+                        </View>
+                        <View style={styles.templateDetails}>
+                          <Text style={styles.templateName}>
+                            {suggestion.suggestedName}
                           </Text>
-                        ) : (
-                          <PhosphorIcon 
-                            name={suggestion.templateData.icon || 'ListChecks'} 
-                            size={28} 
-                            color="#374151" 
-                            weight="duotone"
-                          />
-                        )}
+                          <Text style={styles.templateType}>
+                            {suggestion.templateData.name} • {suggestion.templateData.type}
+                          </Text>
+                        </View>
                       </View>
-                      <View style={styles.templateDetails}>
-                        <Text style={styles.templateName}>
-                          {suggestion.suggestedName}
-                        </Text>
-                        <Text style={styles.templateType}>
-                          {suggestion.templateData.name} • {suggestion.templateData.type}
-                        </Text>
+                      
+                      <View style={styles.confidenceContainer}>
+                        <View style={[
+                          styles.confidenceBadge,
+                          { backgroundColor: getConfidenceColor(suggestion.confidence) + '20' }
+                        ]}>
+                          <Text style={[
+                            styles.confidenceText,
+                            { color: getConfidenceColor(suggestion.confidence) }
+                          ]}>
+                            {getConfidenceText(suggestion.confidence)}
+                          </Text>
+                        </View>
+                        {index === 0 && (
+                          <View style={styles.recommendedBadge}>
+                            <Text style={styles.recommendedText}>Best match</Text>
+                          </View>
+                        )}
                       </View>
                     </View>
                     
-                    <View style={styles.confidenceContainer}>
-                      <View style={[
-                        styles.confidenceBadge,
-                        { backgroundColor: getConfidenceColor(suggestion.confidence) + '20' }
-                      ]}>
-                        <Text style={[
-                          styles.confidenceText,
-                          { color: getConfidenceColor(suggestion.confidence) }
-                        ]}>
-                          {getConfidenceText(suggestion.confidence)}
-                        </Text>
-                      </View>
-                      {index === 0 && (
-                        <View style={styles.recommendedBadge}>
-                          <Text style={styles.recommendedText}>Recommended</Text>
-                        </View>
-                      )}
+                    <Text style={styles.reasoning}>{suggestion.reasoning}</Text>
+                    
+                    <View style={styles.selectButton}>
+                      <Text style={styles.selectButtonText}>Use this template</Text>
+                      <PhosphorIcon name="ArrowRight" size={16} color="#2196F3" weight="bold" />
                     </View>
-                  </View>
-                  
-                  <Text style={styles.reasoning}>{suggestion.reasoning}</Text>
-                  
-                  <View style={styles.templatePurpose}>
-                    <Text style={styles.purposeText}>{suggestion.templateData.purpose}</Text>
-                  </View>
-                  
-                  <View style={styles.selectButton}>
-                    <Text style={styles.selectButtonText}>Use this template</Text>
-                    <PhosphorIcon name="ArrowRight" size={16} color="#2196F3" weight="bold" />
-                  </View>
-                </Pressable>
-              ))}
-            </View>
+                  </Pressable>
+                ))}
+              </View>
+            )}
 
             {/* Alternative Option */}
             <Pressable
@@ -681,19 +769,6 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     lineHeight: 20,
     marginBottom: 12,
-  },
-  templatePurpose: {
-    backgroundColor: '#FFFFFF',
-    padding: 12,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#E5E7EB',
-    marginBottom: 12,
-  },
-  purposeText: {
-    fontSize: 13,
-    color: '#6B7280',
-    fontStyle: 'italic',
   },
   selectButton: {
     flexDirection: 'row',
