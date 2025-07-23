@@ -17,7 +17,7 @@ import {
   useRow,
 } from "tinybase/ui-react";
 import { chakraColors, spacing, radii } from '@/constants/Colors';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI } from '@google/genai';
 import Constants from 'expo-constants';
 
 // Initialize Gemini with API key from environment
@@ -26,40 +26,7 @@ const getGeminiAPI = () => {
   if (!apiKey) {
     throw new Error("Google AI API key not found. Please set EXPO_PUBLIC_GOOGLE_AI_API_KEY in your environment.");
   }
-  return new GoogleGenerativeAI(apiKey);
-};
-
-// Define the schema for structured output
-const todoSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    todos: {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          text: { type: SchemaType.STRING, description: "The main text of the todo item" },
-          notes: { type: SchemaType.STRING, description: "Additional notes about the todo" },
-          emoji: { type: SchemaType.STRING, description: "A relevant emoji for the todo" },
-          category: { type: SchemaType.STRING, description: "The category of the todo" },
-          type: { type: SchemaType.STRING, description: "The type of the todo (A-E)" },
-          done: { type: SchemaType.BOOLEAN, description: "Whether the todo is completed" },
-        },
-        required: ["text", "emoji", "category", "type", "done"]
-      }
-    }
-  },
-  required: ["todos"]
-};
-
-// Timeout wrapper function
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
-    )
-  ]);
+  return new GoogleGenAI({ apiKey });
 };
 
 // Call Gemini API directly
@@ -72,36 +39,6 @@ const callGeminiAPI = async (
   console.log("Initializing Gemini API...");
   const genAI = getGeminiAPI();
 
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    generationConfig: {
-      temperature: 0.7,
-      topK: 32,
-      topP: 1,
-      maxOutputTokens: 2048,
-      responseMimeType: "application/json",
-      responseSchema: todoSchema,
-    },
-    safetySettings: [
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-    ],
-  });
-
   const prompt = `Analyze this image and create todo items based on it.
   Current List Information:
   - List Name: "${listInfo.name}"
@@ -112,29 +49,56 @@ const callGeminiAPI = async (
   To help you understand the schema of a todo for this list, here's the current todos: ${JSON.stringify(currentTodos)}
   Generate relevant, specific, and contextual todo items that match the style and purpose of the current list.
   Please only provide the new todos, not the existing todos provided for context.
-  `;
+  
+  Respond with JSON in this exact format:
+  {
+    "todos": [
+      {
+        "text": "The main text of the todo item",
+        "notes": "Additional notes about the todo",
+        "emoji": "A relevant emoji for the todo",
+        "category": "The category of the todo",
+        "type": "The type of the todo (A-E)",
+        "done": false
+      }
+    ]
+  }`;
 
   console.log("Making request to Gemini API...");
 
-  // Wrap the generateContent call with timeout
-  const result = await withTimeout(
-    model.generateContent([
+  try {
+    const contents = [
       {
         inlineData: {
-          data: image,
           mimeType: mimeType,
+          data: image,
         }
       },
-      prompt
-    ]),
-    25000 // 25 seconds timeout
-  );
+      { text: prompt }
+    ];
 
-  const response = result.response.text();
-  console.log("Raw Gemini response:", response);
-  
-  const todos = JSON.parse(response);
-  return todos;
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: contents,
+    });
+
+    // Get the response text directly
+    const text = response.text;
+    
+    console.log("Gemini response received");
+    
+    try {
+      const parsedResponse = JSON.parse(text);
+      return parsedResponse;
+    } catch (parseError) {
+      console.error("Failed to parse JSON response:", parseError);
+      console.log("Raw response:", text);
+      throw new Error("Failed to parse API response");
+    }
+  } catch (error) {
+    console.error("Gemini API error:", error);
+    throw error;
+  }
 };
 
 interface PhotoUploaderProps {

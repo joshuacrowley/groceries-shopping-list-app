@@ -1,190 +1,129 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI } from '@google/genai';
 
 // Initialize Gemini with API key
-const genAI = new GoogleGenerativeAI(
-  process.env.GOOGLE_AI_API_KEY || "",
-);
-
-// Define the schema for structured todo output
-const todoGenerationSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    todos: {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          text: { type: SchemaType.STRING, description: "The main text/title of the todo item" },
-          notes: { type: SchemaType.STRING, description: "Additional notes or details about the todo" },
-          emoji: { type: SchemaType.STRING, description: "A relevant emoji for the todo" },
-          category: { type: SchemaType.STRING, description: "The category or grouping for the todo" },
-          type: { type: SchemaType.STRING, description: "Priority type: A (critical), B (important), C (normal), D (low), E (someday)" },
-          done: { type: SchemaType.BOOLEAN, description: "Whether the todo is completed (default false)" },
-          date: { type: SchemaType.STRING, description: "Due date in YYYY-MM-DD format if applicable" },
-          time: { type: SchemaType.STRING, description: "Due time in HH:MM format if applicable" },
-          amount: { type: SchemaType.NUMBER, description: "Numerical amount if applicable (e.g., quantity, price)" },
-          url: { type: SchemaType.STRING, description: "Related URL if applicable" },
-          email: { type: SchemaType.STRING, description: "Related email if applicable" },
-          streetAddress: { type: SchemaType.STRING, description: "Related address if applicable" },
-          number: { type: SchemaType.NUMBER, description: "Related phone number if applicable" },
-          fiveStarRating: { type: SchemaType.NUMBER, description: "Rating from 1-5 if applicable" },
-        },
-        required: ["text", "emoji", "category", "type", "done"]
-      }
-    }
-  },
-  required: ["todos"]
-};
-
-// Add timeout wrapper function
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
-    )
-  ]);
-};
+const genAI = new GoogleGenAI({
+  apiKey: process.env.GOOGLE_AI_API_KEY || ""
+});
 
 export async function POST(request: Request) {
   console.log('[generate-todos API] Received POST request');
   
   try {
-    const { 
-      systemPrompt, 
-      description, 
-      listName, 
-      listType, 
-      template,
-      photoData, 
-      fromVoice, 
-      fromPhoto 
-    } = await request.json();
+    const { prompt: userPrompt, listInfo, currentTodos, image, mimeType } = await request.json();
 
-    console.log('[generate-todos API] Request data:', {
-      systemPrompt: systemPrompt ? 'present' : 'missing',
-      description,
-      listName,
-      listType,
-      template,
-      photoData: photoData ? 'present' : 'missing',
-      fromVoice,
-      fromPhoto
+    console.log('[generate-todos API] Request details:', {
+      hasPrompt: !!userPrompt,
+      hasImage: !!image,
+      listName: listInfo?.name,
+      currentTodoCount: currentTodos?.length || 0
     });
 
-    if (!systemPrompt && !description) {
-      return Response.json({ 
-        error: "Either systemPrompt or description is required" 
-      }, { status: 400 });
-    }
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      generationConfig: {
-        temperature: 0.7,
-        topK: 32,
-        topP: 1,
-        maxOutputTokens: 8192,
-        responseMimeType: "application/json",
-        responseSchema: todoGenerationSchema,
-      },
-      safetySettings: [
-        {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-          threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-        },
-      ],
-    });
-
-    // Build the prompt based on available data
-    let prompt = systemPrompt || `You are a helpful assistant that creates structured todos for a ${listType} list.`;
+    // Build the system prompt based on list information
+    const systemPrompt = `You are a helpful assistant generating todos for a list.
     
-    // Add context about the list
-    prompt += `\n\nList Details:
-- Name: ${listName}
-- Type: ${listType}
-- Template: ${template || 'Default'}
-- Description: ${description}`;
+List Information:
+- List Name: "${listInfo.name}"
+- List Purpose: "${listInfo.purpose}"
+- List Template: "${listInfo.template}"
+- Special Instructions: "${listInfo.systemPrompt}"
 
-    // Add specific instructions based on source
-    if (fromPhoto === 'true' && photoData) {
-      prompt += `\n\nThis list was created from a photo. The photo analysis provided the following data:
-${photoData}
+To help you understand the schema of a todo for this list, here's the current todos: ${JSON.stringify(currentTodos)}
 
-Please create todos based on the items, ingredients, or information visible in the photo. Consider the context and purpose of the list template when structuring the todos.`;
+Generate relevant, specific, and contextual todo items that match the style and purpose of the current list.
+Please only provide the new todos, not the existing todos provided for context.
+
+Respond with JSON in this exact format:
+{
+  "todos": [
+    {
+      "text": "The main text/title of the todo item",
+      "notes": "Additional notes or details about the todo",
+      "emoji": "A relevant emoji for the todo",
+      "category": "The category or grouping for the todo",
+      "type": "Priority type: A (critical), B (important), C (normal), D (low), E (someday)",
+      "done": false,
+      "date": "Due date in YYYY-MM-DD format if applicable",
+      "time": "Due time in HH:MM format if applicable",
+      "amount": 0,
+      "url": "Related URL if applicable",
+      "email": "Related email if applicable",
+      "streetAddress": "Related address if applicable",
+      "number": 0,
+      "fiveStarRating": 0
+    }
+  ]
+}`;
+
+    // Combine prompts
+    const fullPrompt = `${systemPrompt}\n\nUser Request: ${userPrompt}`;
+
+    console.log('[generate-todos API] Calling Gemini API...');
+
+    let contents;
+    if (image && mimeType) {
+      // If image is provided, include it
+      contents = [
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: image,
+          }
+        },
+        { text: fullPrompt }
+      ];
+    } else {
+      // Text-only request
+      contents = [{ text: fullPrompt }];
     }
 
-    if (fromVoice === 'true') {
-      prompt += `\n\nThis list was created via voice input. The user described what they wanted, so please create relevant todos that match their intent and the selected template structure.`;
-    }
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: contents,
+    });
 
-    // Add general instruction for todo generation
-    prompt += `\n\nPlease generate 5-10 relevant todos that fit this list's purpose and template. Each todo should:
-1. Be specific and actionable
-2. Include appropriate emoji that represents the task
-3. Have a relevant category for grouping
-4. Include proper priority type (A-E scale)
-5. Include additional fields (notes, dates, amounts, etc.) when applicable
-6. Follow the template's intended structure and workflow
+    // Get the response text directly
+    const text = response.text;
+    
+    console.log('[generate-todos API] Gemini response received');
 
-Generate todos that are realistic, useful, and well-organized.`;
-
-    console.log('[generate-todos API] Sending prompt to Gemini...');
-
-    // Call Gemini with timeout
-    const result = await withTimeout(
-      model.generateContent(prompt),
-      25000 // 25 second timeout
-    );
-
-    const response = await result.response;
-    const text = response.text();
-
-    console.log('[generate-todos API] Raw Gemini response:', text);
-
-    // Parse the structured JSON response
     try {
       const parsedResponse = JSON.parse(text);
       
-      console.log('[generate-todos API] Parsed response:', {
-        todoCount: parsedResponse.todos?.length || 0,
-        firstTodo: parsedResponse.todos?.[0]?.text || 'N/A'
-      });
+      // Validate the response has todos array
+      if (!parsedResponse.todos || !Array.isArray(parsedResponse.todos)) {
+        throw new Error('Invalid response format - missing todos array');
+      }
 
+      console.log('[generate-todos API] Generated todos count:', parsedResponse.todos.length);
       return Response.json(parsedResponse);
-      
+
     } catch (parseError) {
-      console.error('[generate-todos API] Failed to parse JSON response:', parseError);
-      return Response.json({ 
+      console.error('[generate-todos API] Failed to parse response:', parseError);
+      console.log('[generate-todos API] Raw response:', text);
+      
+      return Response.json({
         error: "Failed to parse AI response",
         details: parseError.message
       }, { status: 500 });
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('[generate-todos API] Error:', error);
     
-    if (error.message === 'Request timeout') {
-      return Response.json({ 
-        error: "Request timed out. Please try again." 
-      }, { status: 408 });
+    let errorMessage = 'Failed to generate todos';
+    let statusCode = 500;
+    
+    if (error.message?.includes('API key')) {
+      errorMessage = 'API configuration error';
+      statusCode = 401;
+    } else if (error.message?.includes('timeout')) {
+      errorMessage = 'Request timed out';
+      statusCode = 504;
     }
     
     return Response.json({ 
-      error: "Failed to generate todos",
+      error: errorMessage,
       details: error.message 
-    }, { status: 500 });
+    }, { status: statusCode });
   }
 }

@@ -21,7 +21,7 @@
     "@bacons/apple-targets": "^0.2.0",
     "@clerk/clerk-expo": "^2.5.0",
     "@expo/vector-icons": "^14.1.0",
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.10.0",
     "@react-navigation/bottom-tabs": "^7.3.13",
     "@react-navigation/native": "^7.1.9",
     "expo": "^53.0.0",

@@ -14,10 +14,16 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import VoiceRecordingButton from './VoiceRecordingButton';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { GoogleGenAI } from '@google/genai';
 import Constants from 'expo-constants';
 import { createChatContextGenerator } from '../app/api/chatContext';
+import { 
+  useAudioRecorder, 
+  useAudioRecorderState, 
+  RecordingPresets,
+  AudioModule,
+  setAudioModeAsync 
+} from 'expo-audio';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -27,132 +33,29 @@ const getGeminiAPI = () => {
   if (!apiKey) {
     throw new Error("Google AI API key not found. Please set EXPO_PUBLIC_GOOGLE_AI_API_KEY in your environment.");
   }
-  return new GoogleGenerativeAI(apiKey);
+  
+  // Log the API endpoint being used (without the key)
+  console.log('[VoiceModal] Gemini API endpoint:', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent');
+  console.log('[VoiceModal] API Key present:', !!apiKey);
+  console.log('[VoiceModal] API Key length:', apiKey.length);
+  console.log('[VoiceModal] API Key prefix:', apiKey.substring(0, 8) + '...');
+  
+  return new GoogleGenAI({ apiKey });
 };
 
 // Call Gemini API directly for voice processing
 const callGeminiVoiceAPI = async (
   audioBase64: string,
   mimeType: string,
-  contextData: any
+  contextData: any,
+  modelName: string = 'gemini-2.0-flash-001'
 ) => {
   console.log("[VoiceModal] Initializing Gemini API for voice...");
+  console.log("[VoiceModal] Audio format:", mimeType);
+  console.log("[VoiceModal] Audio base64 length:", audioBase64.length);
+  console.log("[VoiceModal] Using model:", modelName);
+  
   const genAI = getGeminiAPI();
-
-  // Define the response schema for structured output
-  const responseSchema = {
-    type: "object",
-    properties: {
-      message: {
-        type: "string",
-        description: "A natural language response to the user's query"
-      },
-      action: {
-        type: "object",
-        nullable: true,
-        properties: {
-          type: {
-            type: "string",
-            enum: ["navigate", "show_list", "show_items", "add_todo", "update_todo", "delete_todo", "create_list"],
-            description: "The type of action to perform"
-          },
-          target: {
-            type: "string",
-            nullable: true,
-            description: "The list ID or route to navigate to"
-          },
-          data: {
-            type: "object",
-            nullable: true,
-            properties: {
-              text: {
-                type: "string",
-                nullable: true,
-                description: "Todo text content"
-              },
-              notes: {
-                type: "string",
-                nullable: true,
-                description: "Additional notes"
-              },
-              category: {
-                type: "string",
-                nullable: true,
-                description: "Category for the todo"
-              },
-              listId: {
-                type: "string",
-                nullable: true,
-                description: "ID of the list for the todo"
-              },
-              todoId: {
-                type: "string",
-                nullable: true,
-                description: "ID of the todo to update/delete"
-              },
-              template: {
-                type: "string",
-                nullable: true,
-                description: "Template name for new list"
-              },
-              name: {
-                type: "string",
-                nullable: true,
-                description: "Name for new list or item"
-              },
-              purpose: {
-                type: "string",
-                nullable: true,
-                description: "Purpose for new list"
-              },
-              itemName: {
-                type: "string",
-                nullable: true,
-                description: "Generic item name"
-              },
-              listName: {
-                type: "string",
-                nullable: true,
-                description: "Generic list name"
-              }
-            }
-          }
-        },
-        required: ["type"]
-      }
-    },
-    required: ["message"]
-  } as any; // Type assertion to bypass strict typing while using structured output
-
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
-    generationConfig: {
-      temperature: 0.7,
-      topK: 40,
-      topP: 0.95,
-      maxOutputTokens: 1024,
-      responseMimeType: "application/json",
-      responseSchema: responseSchema,
-    },
-    safetySettings: [
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-    ],
-  });
 
   // Prepare context information using XML format
   const contextGenerator = createChatContextGenerator({
@@ -162,64 +65,82 @@ const callGeminiVoiceAPI = async (
   
   const xmlContext = contextGenerator.getSystemMessage();
 
-  // No need to specify JSON format in the prompt - structured output handles it
-  const prompt = `You are a helpful shopping list assistant. Analyze the user's voice command and respond appropriately.
+  // Simplified prompt for testing
+  const prompt = `You are a helpful assistant. Please transcribe what the user said in the audio and respond naturally. 
+  
+  For context, here are the available lists: ${Object.values(contextData?.lists || {}).map((list: any) => list.name).join(', ')}`;
 
-Here is the current state of lists and their items:
-${xmlContext}
-
-Instructions:
-- Provide a natural, conversational response message
-- If the user wants to navigate or view a list, include an action with the list ID
-- If the user asks about items or contents, suggest showing the relevant list
-- If the user asks about specific items, you can see them in the <todo> elements within each list
-- Always use the exact list ID from the available lists above
-- Be helpful and friendly in your response`;
-
-  console.log("[VoiceModal] Making request to Gemini API with structured output...");
+  console.log("[VoiceModal] Making request to Gemini API...");
+  console.log("[VoiceModal] Using model: gemini-2.0-flash-001");
 
   try {
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          data: audioBase64,
-          mimeType: mimeType || 'audio/webm',
+    // Log the full request details
+    const requestData = {
+      model: modelName,
+      contents: [
+        {
+          parts: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: audioBase64, // Make sure this is base64 without the data URL prefix
+              }
+            },
+            { text: prompt }
+          ]
         }
-      },
-      prompt
-    ]);
+      ],
+    };
+    
+    console.log("[VoiceModal] Request structure:", JSON.stringify({
+      ...requestData,
+      contents: requestData.contents.map(content => ({
+        parts: content.parts.map((part, idx) => 
+          idx === 0 && part.inlineData 
+            ? { inlineData: { ...part.inlineData, data: part.inlineData.data.substring(0, 100) + '...(truncated)' } }
+            : part
+        )
+      }))
+    }, null, 2));
+    
+    // Make the actual request with the new API pattern
+    const response = await genAI.models.generateContent(requestData);
 
-    const response = await result.response;
-    const text = response.text();
+    // Get the response text directly
+    const text = response.text;
     
     console.log("[VoiceModal] Gemini response:", text);
     
-    // With structured output, the response should already be valid JSON
-    try {
-      const parsedResponse = JSON.parse(text);
-      console.log("[VoiceModal] Parsed structured response:", parsedResponse);
-      
-      // Validate the response structure
-      if (!parsedResponse.message) {
-        parsedResponse.message = "I understood your request.";
-      }
-      
-      return parsedResponse;
-    } catch (parseError) {
-      console.error("[VoiceModal] Failed to parse structured JSON response:", parseError);
-      console.log("[VoiceModal] Raw text:", text);
-      
-      // This shouldn't happen with structured output, but keep as fallback
-      return {
-        message: "I heard your request but couldn't process it properly. Please try again.",
-        action: null
-      };
-    }
+    // For now, just return the text as a message (testing phase)
+    return {
+      message: text || "I couldn't understand the audio. Please try again.",
+      action: null
+    };
   } catch (error) {
     console.error("[VoiceModal] Gemini API error:", error);
     
+    // Log the full error object
+    console.error("[VoiceModal] Full error object:", JSON.stringify(error, null, 2));
+    
+    // Log specific error properties
+    if (error.response) {
+      console.error("[VoiceModal] Error response status:", error.response.status);
+      console.error("[VoiceModal] Error response headers:", error.response.headers);
+      console.error("[VoiceModal] Error response data:", error.response.data);
+    }
+    
     // Log the specific error for debugging
     console.error("[VoiceModal] Error details:", error.message || error);
+    console.error("[VoiceModal] Error stack:", error.stack);
+    
+    // Check for specific error types
+    if (error.message?.includes('500')) {
+      throw new Error('The AI service is temporarily unavailable. Please try again in a moment.');
+    } else if (error.message?.includes('API key')) {
+      throw new Error('There is an issue with the API configuration. Please contact support.');
+    } else if (error.message?.includes('model')) {
+      throw new Error('The AI model is not available. Please try again later.');
+    }
     
     throw error;
   }
@@ -264,24 +185,63 @@ interface VoiceModalProps {
 export default function VoiceModal({ visible, onClose, contextData }: VoiceModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [response, setResponse] = useState<VoiceResponse | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
+  const [hasPermission, setHasPermission] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
+  const [isActivelyRecording, setIsActivelyRecording] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const volumeAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // Calculate content height based on state
-  const getContentHeight = () => {
-    if (showHelp) return 400;
-    if (response) return 350;
-    return 220;
+  // Audio recording setup with high quality settings
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorderState = useAudioRecorderState(audioRecorder, 100); // Update every 100ms
+
+  // Request permissions on mount
+  useEffect(() => {
+    requestPermissions();
+  }, []);
+
+  const requestPermissions = async () => {
+    try {
+      const status = await AudioModule.requestRecordingPermissionsAsync();
+      setHasPermission(status.granted);
+      
+      if (status.granted) {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          allowsRecording: true,
+          interruptionMode: 'doNotMix',
+          shouldPlayInBackground: false,
+        });
+      } else {
+        console.error('[VoiceModal] Microphone permission denied');
+      }
+    } catch (error) {
+      console.error('[VoiceModal] Permission error:', error);
+      setHasPermission(false);
+    }
   };
 
+  // Start recording when modal opens, stop when it closes
   useEffect(() => {
     if (visible) {
+      // Check permission before recording
+      if (!hasPermission) {
+        Alert.alert(
+          'Microphone Permission Required',
+          'Please grant microphone access to use voice commands.',
+          [{ text: 'OK', onPress: onClose }]
+        );
+        return;
+      }
+      
       // Reset state when opening
       setResponse(null);
       setIsProcessing(false);
-      setIsRecording(false);
-      setShowHelp(false);
+      setIsActivelyRecording(false);
+      setIsInitializing(false);
+      setRecordingStartTime(null); // Reset start time
       
       // Animate sheet sliding up
       Animated.spring(slideAnim, {
@@ -290,6 +250,25 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
         stiffness: 300,
         useNativeDriver: true,
       }).start();
+
+      // Start recording
+      startRecording();
+      
+      // Start pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
     } else {
       // Animate sheet sliding down
       Animated.timing(slideAnim, {
@@ -297,18 +276,144 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
         duration: 250,
         useNativeDriver: true,
       }).start();
-    }
-  }, [visible]);
 
-  const handleRecordingStart = () => {
-    setIsRecording(true);
-    setResponse(null);
-    setShowHelp(false);
+      // Stop recording if active
+      if (isActivelyRecording) {
+        stopRecording();
+      } else if (isInitializing) {
+        // User released too quickly
+        setIsActivelyRecording(false);
+        setIsInitializing(false);
+      }
+      
+      // Reset states
+      setIsActivelyRecording(false);
+      setIsInitializing(false);
+      setRecordingStartTime(null); // Reset start time
+      
+      // Stop pulse animation
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+    }
+  }, [visible, hasPermission]);
+
+  // Monitor audio levels for volume visualization
+  useEffect(() => {
+    if (isActivelyRecording) {
+      // Create a dynamic volume animation since metering might not be available
+      const volumeAnimation = () => {
+        // Random volume levels to simulate voice input
+        const randomVolume = 0.3 + Math.random() * 0.7;
+        
+        Animated.timing(volumeAnim, {
+          toValue: randomVolume,
+          duration: 200,
+          useNativeDriver: false,
+        }).start();
+      };
+      
+      // Start with a base level
+      volumeAnimation();
+      const interval = setInterval(volumeAnimation, 200);
+      
+      return () => {
+        clearInterval(interval);
+        Animated.timing(volumeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: false,
+        }).start();
+      };
+    }
+  }, [isActivelyRecording]);
+
+  const startRecording = async () => {
+    try {
+      console.log('[VoiceModal] Starting recording...');
+      
+      setIsInitializing(true);
+      
+      // Configure audio session for recording
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        interruptionMode: 'doNotMix',
+        shouldPlayInBackground: false,
+      });
+      
+      await audioRecorder.prepareToRecordAsync();
+      
+      await audioRecorder.record();
+      
+      // Set our local state
+      setIsActivelyRecording(true);
+      setIsInitializing(false);
+      setRecordingStartTime(Date.now());
+      
+      console.log('[VoiceModal] Recording started successfully');
+      
+    } catch (error) {
+      console.error('[VoiceModal] Recording start error:', error);
+      setIsInitializing(false);
+      setIsActivelyRecording(false);
+      Alert.alert(
+        'Recording Error',
+        'Failed to start recording. Please check microphone permissions.',
+        [{ text: 'OK', onPress: onClose }]
+      );
+    }
   };
 
-  const handleRecordingStop = () => {
-    setIsRecording(false);
-    setIsProcessing(true);
+  const stopRecording = async () => {
+    try {
+      // Update our local state immediately
+      setIsActivelyRecording(false);
+      
+      // Check minimum recording time
+      const recordingDuration = recordingStartTime ? Date.now() - recordingStartTime : 0;
+      console.log('[VoiceModal] Recording duration:', recordingDuration, 'ms');
+      
+      if (recordingDuration < 500) { // Minimum 500ms recording
+        Alert.alert(
+          'Too Quick!',
+          'Please hold the button longer while speaking.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
+      console.log('[VoiceModal] Stopping recording...');
+      console.log('[VoiceModal] audioRecorder.isRecording:', audioRecorder.isRecording);
+      console.log('[VoiceModal] audioRecorder.uri before stop:', audioRecorder.uri);
+      
+      await audioRecorder.stop();
+      
+      // Get the recording URI
+      const recordingUri = audioRecorder.uri;
+      
+      console.log('[VoiceModal] Recording stopped');
+      console.log('[VoiceModal] Recording URI:', recordingUri);
+      
+      if (recordingUri) {
+        console.log('[VoiceModal] Recording completed, URI:', recordingUri);
+        // Process the recording
+        handleRecordingComplete(recordingUri);
+      } else {
+        console.error('[VoiceModal] No recording URI available after stop');
+        Alert.alert(
+          'Recording Error',
+          'Failed to capture audio. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('[VoiceModal] Recording stop error:', error);
+      Alert.alert(
+        'Recording Error',
+        'Failed to stop recording. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handleRecordingComplete = async (audioUri: string) => {
@@ -321,16 +426,56 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
       const response = await fetch(audioUri);
       const blob = await response.blob();
       
+      console.log('[VoiceModal] Audio blob type:', blob.type);
+      console.log('[VoiceModal] Audio blob size:', blob.size);
+      
+      // Check if the audio file is too large (Gemini has limits)
+      if (blob.size > 10 * 1024 * 1024) { // 10MB limit
+        throw new Error('Audio recording is too large. Please try a shorter recording.');
+      }
+      
+      // Check if the audio is too small (likely corrupted)
+      if (blob.size < 1000) { // Less than 1KB is suspicious
+        console.error('[VoiceModal] Audio file is too small, likely corrupted');
+        throw new Error('Audio recording failed. Please try again.');
+      }
+      
       const reader = new FileReader();
       
       reader.onloadend = async () => {
         try {
           const base64Audio = (reader.result as string).split(',')[1];
           
+          console.log('[VoiceModal] Audio base64 length:', base64Audio?.length);
+          console.log('[VoiceModal] Audio base64 preview:', base64Audio?.substring(0, 100) + '...');
+          
+          // Ensure we have valid base64 data
+          if (!base64Audio) {
+            throw new Error('Failed to convert audio to base64');
+          }
+          
+          // Determine the correct MIME type
+          let mimeType = blob.type || 'audio/m4a';
+          
+          // Map common audio types to ensure compatibility
+          if (mimeType === 'audio/x-m4a') {
+            mimeType = 'audio/m4a';
+          } else if (mimeType === 'audio/mp4') {
+            mimeType = 'audio/m4a'; // iOS often records as mp4 but it's actually m4a
+          } else if (!mimeType || mimeType === 'application/octet-stream') {
+            // Default to m4a if mime type is unknown
+            mimeType = 'audio/m4a';
+          }
+          
+          console.log('[VoiceModal] Using MIME type:', mimeType);
+          
+          // Log the actual prompt being sent
+          console.log('[VoiceModal] Sending audio with simplified prompt for testing');
+          
           // Call Gemini API with structured output
           const result = await callGeminiVoiceAPI(
             base64Audio,
-            'audio/m4a',
+            mimeType,
             contextData
           );
           
@@ -352,9 +497,15 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
       reader.readAsDataURL(blob);
     } catch (error) {
       console.error('[VoiceModal] Voice processing error:', error);
+      
+      // Show a more user-friendly error message
+      const errorMessage = error.message?.includes('temporarily unavailable') 
+        ? error.message 
+        : 'Failed to process your voice command. Please try again.';
+      
       Alert.alert(
         'Processing Error',
-        `Failed to process your voice command: ${error.message}. Please try again.`,
+        errorMessage,
         [{ text: 'OK' }]
       );
       setIsProcessing(false);
@@ -463,6 +614,29 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
     outputRange: [600, 0],
   });
 
+  // Calculate content height based on state
+  const getContentHeight = () => {
+    if (response) return 300;
+    if (isProcessing) return 220;
+    return 240; // Compact height for listening
+  };
+
+  const isListening = isActivelyRecording && !isProcessing;
+  const isPreparing = isInitializing || (visible && !isActivelyRecording && !isProcessing && !response);
+  
+  // Debug component state changes only
+  useEffect(() => {
+    if (visible || isActivelyRecording || isProcessing) {
+      console.log('[VoiceModal] State:', {
+        visible,
+        isListening,
+        isPreparing,
+        isProcessing,
+        isActivelyRecording,
+      });
+    }
+  }, [visible, isListening, isPreparing, isProcessing, isActivelyRecording]);
+
   return (
     <Modal
       visible={visible}
@@ -499,38 +673,56 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>
-              {isRecording ? 'Listening...' : 
+              {isListening ? 'Listening...' : 
                isProcessing ? 'Processing...' : 
                response ? 'Here\'s what I found' : 
-               'Ask me anything'}
+               isPreparing ? 'Getting ready...' : 
+               'Voice Assistant'}
             </Text>
-            
-            {/* Help button */}
-            {!response && !isProcessing && (
-              <Pressable 
-                style={styles.helpButton}
-                onPress={() => setShowHelp(!showHelp)}
-              >
-                <Feather 
-                  name={showHelp ? "x" : "help-circle"} 
-                  size={20} 
-                  color="#6B7280" 
-                />
-              </Pressable>
-            )}
           </View>
           
           {/* Content */}
           <View style={[styles.content, { minHeight: getContentHeight() - 80 }]}>
-            {/* Help content */}
-            {showHelp && (
-              <View style={styles.helpContent}>
-                <Text style={styles.helpTitle}>Voice Assistant Tips</Text>
-                <Text style={styles.helpText}>• "What's on my grocery list?"</Text>
-                <Text style={styles.helpText}>• "Show me my home list"</Text>
-                <Text style={styles.helpText}>• "Add milk to shopping"</Text>
-                <Text style={styles.helpText}>• "What do I need to buy?"</Text>
-                <Text style={styles.helpText}>• "Navigate to recipes"</Text>
+            {/* Listening visualization */}
+            {(isListening || isPreparing) && !response && (
+              <View style={styles.listeningContainer}>
+                {/* Animated mic icon with pulse */}
+                <Animated.View style={[
+                  styles.micContainer,
+                  { transform: [{ scale: pulseAnim }] }
+                ]}>
+                  <Feather name="mic" size={48} color="#2196F3" />
+                </Animated.View>
+                
+                {/* Volume visualization bars - only show when actually recording */}
+                {isListening && (
+                  <View style={styles.volumeBars}>
+                    {[...Array(5)].map((_, index) => (
+                      <Animated.View
+                        key={index}
+                        style={[
+                          styles.volumeBar,
+                          {
+                            height: volumeAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [10, 40 - index * 5],
+                            }),
+                            opacity: volumeAnim.interpolate({
+                              inputRange: [0, (index + 1) * 0.2],
+                              outputRange: [0.3, 1],
+                              extrapolate: 'clamp',
+                            }),
+                            backgroundColor: index < 3 ? '#2196F3' : index < 4 ? '#FF9800' : '#F44336',
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )}
+                
+                <Text style={styles.listeningText}>
+                  {isPreparing ? 'Preparing microphone...' : 'Keep holding to speak'}
+                </Text>
               </View>
             )}
             
@@ -538,11 +730,12 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
             {isProcessing && (
               <View style={styles.processingContainer}>
                 <ActivityIndicator size="large" color="#2196F3" />
+                <Text style={styles.processingText}>Understanding your request...</Text>
               </View>
             )}
             
             {/* Response content */}
-            {response && !isProcessing && (
+            {response && !isProcessing && !isListening && (
               <View style={styles.responseContainer}>
                 <Text style={styles.responseText}>{response.message}</Text>
                 
@@ -560,17 +753,65 @@ export default function VoiceModal({ visible, onClose, contextData }: VoiceModal
               </View>
             )}
             
-            {/* Recording button - always visible at bottom */}
-            {!showHelp && (
-              <View style={styles.recordButtonContainer}>
-                <VoiceRecordingButton
-                  onRecordingStart={handleRecordingStart}
-                  onRecordingStop={handleRecordingStop}
-                  onRecordingComplete={handleRecordingComplete}
-                  disabled={isProcessing}
-                  size="medium"
-                />
-              </View>
+            {/* Debug: Test with sample audio */}
+            {__DEV__ && (
+              <>
+                <Pressable
+                  style={[styles.debugButton, { marginTop: 20 }]}
+                  onPress={async () => {
+                    try {
+                      setIsProcessing(true);
+                      
+                      // Test with a simple base64 encoded audio
+                      // This is a very short silent audio for testing
+                      const testAudioBase64 = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+                      
+                      const result = await callGeminiVoiceAPI(
+                        testAudioBase64,
+                        'audio/wav',
+                        contextData
+                      );
+                      
+                      setResponse(result);
+                    } catch (error) {
+                      console.error('[VoiceModal] Test audio error:', error);
+                      Alert.alert('Test Error', error.message);
+                    } finally {
+                      setIsProcessing(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.debugButtonText}>Test with Sample Audio</Text>
+                </Pressable>
+                
+                <Pressable
+                  style={[styles.debugButton, { marginTop: 10, backgroundColor: '#2196F3' }]}
+                  onPress={async () => {
+                    try {
+                      setIsProcessing(true);
+                      
+                      // Test with text-only to verify API key works
+                      const genAI = getGeminiAPI();
+                      const response = await genAI.models.generateContent({
+                        model: 'gemini-2.0-flash-001',
+                        contents: [{ parts: [{ text: 'Say hello in 5 words' }] }]
+                      });
+                      
+                      setResponse({
+                        message: response.text || 'No response from API',
+                        action: null
+                      });
+                    } catch (error) {
+                      console.error('[VoiceModal] Test text error:', error);
+                      Alert.alert('API Test Error', error.message);
+                    } finally {
+                      setIsProcessing(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.debugButtonText}>Test Text-Only API</Text>
+                </Pressable>
+              </>
             )}
           </View>
         </Animated.View>
@@ -612,7 +853,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 24,
     paddingBottom: 16,
   },
@@ -621,32 +862,48 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F2937',
   },
-  helpButton: {
-    padding: 8,
-  },
   content: {
     paddingHorizontal: 24,
   },
-  helpContent: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    padding: 16,
+  listeningContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  micContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#E3F2FD',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  volumeBars: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 16,
+    height: 40,
+    alignItems: 'center',
   },
-  helpTitle: {
+  volumeBar: {
+    width: 6,
+    backgroundColor: '#2196F3',
+    borderRadius: 3,
+    minHeight: 10,
+  },
+  listeningText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  helpText: {
-    fontSize: 13,
     color: '#6B7280',
-    marginBottom: 4,
+    marginTop: 8,
   },
   processingContainer: {
     paddingVertical: 40,
     alignItems: 'center',
+  },
+  processingText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 12,
   },
   responseContainer: {
     paddingTop: 8,
@@ -672,9 +929,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  recordButtonContainer: {
+  debugButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
     alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
+    justifyContent: 'center',
+  },
+  debugButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
