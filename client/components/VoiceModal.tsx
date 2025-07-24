@@ -27,6 +27,8 @@ import {
   AudioModule,
   setAudioModeAsync 
 } from 'expo-audio';
+import { useStore, useAddRowCallback, useRow } from 'tinybase/ui-react';
+import { getUniqueId } from 'tinybase';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -51,7 +53,7 @@ const callGeminiVoiceAPI = async (
   audioBase64: string,
   mimeType: string,
   contextData: any,
-  modelName: string = 'gemini-2.0-flash-001'
+  modelName: string = 'gemini-2.5-flash-lite'
 ) => {
   console.log("[VoiceModal] Initializing Gemini API for voice...");
   console.log("[VoiceModal] Audio format:", mimeType);
@@ -89,6 +91,7 @@ PRIORITY ORDER:
 
 Your response must be pure JSON in this format:
 {
+  "transcription": "Exact transcription of what the user said",
   "message": "A natural answer to their question, mentioning the specific item or list found",
   "action": {
     "type": "action_type",
@@ -106,9 +109,9 @@ Action types and their data:
   - target: The list ID from the XML
   - data: { "listName": "human-readable name" }
 
-- "add_todo": Add item to a list (only for explicit add requests)
+- "create_todo": Add one or more items to a list (for explicit add/create requests)
   - target: The list ID
-  - data: { "text": "item name", "listId": "list_id", "listName": "list name", "category": "optional category" }
+  - data: { "texts": ["item1", "item2"], "listId": "list_id", "listName": "list name" }
 
 - "navigate": Navigate to a route (only for explicit navigation requests)
   - target: Route path (e.g., "/lists", "/profile")
@@ -120,18 +123,24 @@ Action types and their data:
 
 Examples:
 - User: "What's for dinner tonight?" → Find todo "Chicken Parmesan" in "Meal Plan" list → 
-  Response: { "message": "For dinner tonight, you have Chicken Parmesan planned.", "action": { "type": "show_todo", "target": "meal-plan-list-id", "data": { "todoId": "todo-123", "todoText": "Chicken Parmesan", "listId": "meal-plan-list-id", "listName": "Meal Plan" } } }
+  Response: { "transcription": "What's for dinner tonight?", "message": "For dinner tonight, you have Chicken Parmesan planned.", "action": { "type": "show_todo", "target": "meal-plan-list-id", "data": { "todoId": "todo-123", "todoText": "Chicken Parmesan", "listId": "meal-plan-list-id", "listName": "Meal Plan" } } }
 
 - User: "Do I need milk?" → Search todos for "milk" → 
-  Response: { "message": "Yes, milk is on your Grocery list.", "action": { "type": "show_todo", "target": "grocery-list-id", "data": { "todoId": "todo-456", "todoText": "Milk", "listId": "grocery-list-id", "listName": "Grocery" } } }
+  Response: { "transcription": "Do I need milk?", "message": "Yes, milk is on your Grocery list.", "action": { "type": "show_todo", "target": "grocery-list-id", "data": { "todoId": "todo-456", "todoText": "Milk", "listId": "grocery-list-id", "listName": "Grocery" } } }
+
+- User: "Add apples, oranges, and bananas to my shopping list" → Parse multiple items →
+  Response: { "transcription": "Add apples, oranges, and bananas to my shopping list", "message": "I'll add these 3 items to your Shopping list: apples, oranges, and bananas.", "action": { "type": "create_todo", "target": "shopping-list-id", "data": { "texts": ["apples", "oranges", "bananas"], "listId": "shopping-list-id", "listName": "Shopping" } } }
+
+- User: "Add go to the post office to my today list" → Single item →
+  Response: { "transcription": "Add go to the post office to my today list", "message": "I'll add 'Go to the post office' to your Today list.", "action": { "type": "create_todo", "target": "today-list-id", "data": { "texts": ["Go to the post office"], "listId": "today-list-id", "listName": "Today" } } }
 
 - User: "What do I need to buy?" → No specific item, show relevant list →
-  Response: { "message": "Here's your shopping list with 5 items to buy.", "action": { "type": "show_list", "target": "shopping-list-id", "data": { "listName": "Shopping" } } }
+  Response: { "transcription": "What do I need to buy?", "message": "Here's your shopping list with 5 items to buy.", "action": { "type": "show_list", "target": "shopping-list-id", "data": { "listName": "Shopping" } } }
 
 Remember: Always try to ANSWER THE QUESTION with specific information. Output ONLY valid JSON, nothing else.`;
 
   console.log("[VoiceModal] Making request to Gemini API...");
-  console.log("[VoiceModal] Using model: gemini-2.0-flash-001");
+  console.log("[VoiceModal] Using model: gemini-2.5-flash-lite");
   console.log("[VoiceModal] Context lists:", Object.keys(contextData?.lists || {}).length);
   console.log("[VoiceModal] Context todos:", Object.keys(contextData?.todos || {}).length);
 
@@ -140,6 +149,10 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
     const responseSchema = {
       type: Type.OBJECT,
       properties: {
+        transcription: {
+          type: Type.STRING,
+          description: "The exact transcription of what the user said"
+        },
         message: {
           type: Type.STRING,
           description: "The response message to show to the user"
@@ -150,7 +163,7 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
           properties: {
             type: {
               type: Type.STRING,
-              enum: ["show_list", "show_todo", "create_todo", "mark_done", "mark_undone"]
+              enum: ["show_list", "show_todo", "create_todo", "mark_done", "mark_undone", "navigate", "create_list"]
             },
             target: {
               type: Type.STRING,
@@ -174,12 +187,56 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
               type: Type.STRING,
               nullable: true
             },
+            texts: { // Added for multiple todos
+              type: Type.ARRAY,
+              nullable: true,
+              items: {
+                type: Type.STRING,
+                nullable: true
+              }
+            },
             notes: {
               type: Type.STRING,
               nullable: true
             },
             category: {
               type: Type.STRING,
+              nullable: true
+            },
+            date: {
+              type: Type.STRING,
+              nullable: true
+            },
+            time: {
+              type: Type.STRING,
+              nullable: true
+            },
+            url: {
+              type: Type.STRING,
+              nullable: true
+            },
+            emoji: {
+              type: Type.STRING,
+              nullable: true
+            },
+            email: {
+              type: Type.STRING,
+              nullable: true
+            },
+            streetAddress: {
+              type: Type.STRING,
+              nullable: true
+            },
+            number: {
+              type: Type.NUMBER,
+              nullable: true
+            },
+            amount: {
+              type: Type.NUMBER,
+              nullable: true
+            },
+            fiveStarRating: {
+              type: Type.NUMBER,
               nullable: true
             },
             // For lists
@@ -215,8 +272,8 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
           required: ["type", "target"]
         }
       },
-      required: ["message"],
-      propertyOrdering: ["message", "action"]
+      required: ["transcription", "message"],
+      propertyOrdering: ["transcription", "message", "action"]
     };
     
     // Log the full request details
@@ -267,6 +324,7 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
     
     // Return the structured response
     return {
+      transcription: parsedResponse.transcription,
       message: parsedResponse.message,
       action: parsedResponse.action || null
     };
@@ -301,18 +359,164 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
   }
 };
 
+// Generate todos using structured output based on list's system prompt
+const generateTodosWithStructuredOutput = async (
+  todoTexts: string[],
+  listInfo: any,
+  existingTodos: any[]
+) => {
+  console.log("[VoiceModal] Generating structured todos for list:", listInfo.name);
+  const genAI = getGeminiAPI();
+
+  // Define the response schema for structured output
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      todos: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            text: {
+              type: Type.STRING,
+              description: "The main text of the todo item"
+            },
+            notes: {
+              type: Type.STRING,
+              nullable: true,
+              description: "Additional notes about the todo"
+            },
+            emoji: {
+              type: Type.STRING,
+              nullable: true,
+              description: "A relevant emoji for the todo"
+            },
+            category: {
+              type: Type.STRING,
+              nullable: true,
+              description: "The category of the todo"
+            },
+            type: {
+              type: Type.STRING,
+              nullable: true,
+              description: "The type of the todo (A-E)"
+            },
+            done: {
+              type: Type.BOOLEAN,
+              description: "Whether the todo is completed"
+            },
+            date: {
+              type: Type.STRING,
+              nullable: true,
+              description: "Date associated with the todo"
+            },
+            time: {
+              type: Type.STRING,
+              nullable: true,
+              description: "Time associated with the todo"
+            },
+            url: {
+              type: Type.STRING,
+              nullable: true,
+              description: "URL associated with the todo"
+            },
+            email: {
+              type: Type.STRING,
+              nullable: true,
+              description: "Email address associated with the todo"
+            },
+            streetAddress: {
+              type: Type.STRING,
+              nullable: true,
+              description: "Street address associated with the todo"
+            },
+            number: {
+              type: Type.NUMBER,
+              nullable: true,
+              description: "A numeric value associated with the todo"
+            },
+            amount: {
+              type: Type.NUMBER,
+              nullable: true,
+              description: "A monetary amount associated with the todo"
+            },
+            fiveStarRating: {
+              type: Type.NUMBER,
+              nullable: true,
+              description: "A rating from 1 to 5"
+            }
+          },
+          required: ["text", "done"],
+          propertyOrdering: ["text", "notes", "emoji", "category", "type", "done", "date", "time", "url", "email", "streetAddress", "number", "amount", "fiveStarRating"]
+        }
+      }
+    },
+    required: ["todos"],
+    propertyOrdering: ["todos"]
+  };
+
+  const prompt = `You are creating todo items for a specific list. Follow the list's system instructions carefully.
+  
+  List Information:
+  - List Name: "${listInfo.name}"
+  - List Purpose: "${listInfo.purpose}"
+  - List Template: "${listInfo.template}"
+  - System Instructions: "${listInfo.systemPrompt || 'Standard todo list'}"
+  
+  Current todos in this list (for context on format and style):
+  ${JSON.stringify(existingTodos.slice(0, 5))}
+  
+  Create todo items for the following:
+  ${todoTexts.map((text, i) => `${i + 1}. ${text}`).join('\n')}
+  
+  IMPORTANT: Follow the system instructions exactly. Each list type has specific requirements for how todos should be formatted, what fields to include, and what style to use.
+  
+  Return ONLY the new todos, not the existing ones. Each todo should match the style and structure of the existing todos in the list.`;
+
+  try {
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash-lite',
+      contents: [{ text: prompt }],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: responseSchema
+      }
+    });
+
+    const text = response.text;
+    const parsedResponse = JSON.parse(text);
+    
+    console.log("[VoiceModal] Generated todos:", parsedResponse.todos);
+    return parsedResponse.todos;
+  } catch (error) {
+    console.error("[VoiceModal] Error generating structured todos:", error);
+    throw error;
+  }
+};
+
 export interface VoiceResponse {
+  transcription: string;
   message: string;
   action?: {
-    type: 'navigate' | 'show_list' | 'show_items' | 'show_todo' | 'add_todo' | 'update_todo' | 'delete_todo' | 'create_list';
+    type: 'navigate' | 'show_list' | 'show_items' | 'show_todo' | 'add_todo' | 'update_todo' | 'delete_todo' | 'create_list' | 'create_todo';
     target?: string;
     data?: {
       // For todos
       todoId?: string;
       todoText?: string;
       text?: string;
+      texts?: string[]; // For multiple todos
       notes?: string;
       category?: string;
+      date?: string;
+      time?: string;
+      url?: string;
+      emoji?: string;
+      email?: string;
+      streetAddress?: string;
+      number?: number;
+      amount?: number;
+      fiveStarRating?: number;
       
       // For lists
       listId?: string;
@@ -346,6 +550,11 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
   const [isInitializing, setIsInitializing] = useState(false);
   const [isActivelyRecording, setIsActivelyRecording] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  const [isTranscriptionExpanded, setIsTranscriptionExpanded] = useState(false);
+  const [isConfirmingTodos, setIsConfirmingTodos] = useState(false);
+  const [isCreatingTodos, setIsCreatingTodos] = useState(false);
+  const [createdTodosCount, setCreatedTodosCount] = useState(0);
+  const [todoCreationError, setTodoCreationError] = useState<string | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const volumeAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -355,6 +564,9 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
   const isDark = colorScheme === 'dark';
   const textColor = useThemeColor({}, 'text');
   const iconColor = useThemeColor({}, 'icon');
+
+  // Store access
+  const store = useStore();
 
   // Audio recording setup with high quality settings
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -413,6 +625,11 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
       // Reset state when opening
       setResponse(null);
       setIsProcessing(false);
+      setIsTranscriptionExpanded(false);
+      setIsConfirmingTodos(false);
+      setIsCreatingTodos(false);
+      setCreatedTodosCount(0);
+      setTodoCreationError(null);
       
       // Animate sheet sliding up
       Animated.spring(slideAnim, {
@@ -676,6 +893,12 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
 
     const { action } = response;
     
+    // Handle create_todo differently - show confirmation
+    if (action.type === 'create_todo') {
+      setIsConfirmingTodos(true);
+      return;
+    }
+    
     // Validate that we have a valid target before navigating
     if (!action.target && (action.type === 'show_list' || action.type === 'show_items' || action.type === 'navigate')) {
       console.error('[VoiceModal] No target specified for navigation action');
@@ -760,6 +983,67 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
     }
   };
 
+  const handleCreateTodos = async () => {
+    if (!response?.action || response.action.type !== 'create_todo') return;
+    
+    const { action } = response;
+    const listId = action.target;
+    const texts = action.data?.texts || [action.data?.text].filter(Boolean);
+    
+    if (!listId || texts.length === 0) {
+      setTodoCreationError('Invalid todo data');
+      return;
+    }
+    
+    setIsCreatingTodos(true);
+    setTodoCreationError(null);
+    
+    try {
+      // Get list info
+      const list = store.getRow('lists', listId);
+      if (!list) {
+        throw new Error('List not found');
+      }
+      
+      // Get existing todos for context
+      const allTodos = store.getTable('todos');
+      const existingTodos = Object.entries(allTodos)
+        .filter(([_, todo]: [string, any]) => todo.list === listId)
+        .map(([_, todo]) => todo)
+        .slice(0, 5); // Get recent todos for context
+      
+      // Generate structured todos
+      const generatedTodos = await generateTodosWithStructuredOutput(
+        texts,
+        list,
+        existingTodos
+      );
+      
+      // Add todos to the store
+      let addedCount = 0;
+      store.transaction(() => {
+        for (const todoData of generatedTodos) {
+          const todoId = getUniqueId();
+          store.setRow('todos', todoId, {
+            ...todoData,
+            list: listId,
+            done: false,
+          });
+          addedCount++;
+        }
+      });
+      
+      setCreatedTodosCount(addedCount);
+      setIsCreatingTodos(false);
+      setIsConfirmingTodos(false);
+      
+    } catch (error) {
+      console.error('[VoiceModal] Error creating todos:', error);
+      setTodoCreationError('Failed to create todos. Please try again.');
+      setIsCreatingTodos(false);
+    }
+  };
+
   const getActionButtonText = () => {
     if (!response?.action) return '';
     
@@ -773,6 +1057,9 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
         return 'View in List';
       case 'add_todo':
         return 'Add to List';
+      case 'create_todo':
+        const count = response.action.data?.texts?.length || 1;
+        return count > 1 ? `Add ${count} items` : 'Add item';
       case 'update_todo':
         return 'Update Todo';
       case 'delete_todo':
@@ -791,12 +1078,23 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
 
   // Calculate content height based on state
   const getContentHeight = () => {
+    if (createdTodosCount > 0) {
+      return 280; // Success state
+    }
+    if (isConfirmingTodos || isCreatingTodos) {
+      return 380; // Confirmation/creating state
+    }
     if (response) {
+      let baseHeight = 300;
       // Extra height for visual representations
-      if (response.action && (response.action.type === 'show_list' || response.action.type === 'show_items' || response.action.type === 'add_todo' || response.action.type === 'show_todo')) {
-        return 380;
+      if (response.action && (response.action.type === 'show_list' || response.action.type === 'show_items' || response.action.type === 'add_todo' || response.action.type === 'show_todo' || response.action.type === 'create_todo')) {
+        baseHeight = 380;
       }
-      return 300;
+      // Add extra height when transcription is expanded
+      if (isTranscriptionExpanded) {
+        baseHeight += 40;
+      }
+      return baseHeight;
     }
     if (isProcessing) return 220;
     return 240; // Compact height for listening
@@ -928,16 +1226,127 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
             {/* Response content */}
             {response && !isProcessing && !isListening && (
               <View style={styles.responseContainer}>
-                <View style={styles.responseHeader}>
-                  <Feather name="check-circle" size={24} color="#059669" />
-                  <Text style={styles.responseHeaderText}>Response ready</Text>
-                </View>
-                <View style={styles.responseMessageContainer}>
-                  <Text style={styles.responseText}>{response.message}</Text>
-                </View>
-                
-                {/* Visual representation based on action type */}
-                {response.action && (response.action.type === 'show_list' || response.action.type === 'show_items') && response.action.target && (
+                {/* Show different UI based on state */}
+                {createdTodosCount > 0 ? (
+                  // Success state
+                  <View style={styles.successContainer}>
+                    <View style={styles.successIcon}>
+                      <Feather name="check-circle" size={48} color="#059669" />
+                    </View>
+                    <Text style={styles.successTitle}>
+                      {createdTodosCount === 1 ? 'Item added!' : `${createdTodosCount} items added!`}
+                    </Text>
+                    <Text style={styles.successMessage}>
+                      Successfully added to {response.action?.data?.listName || 'your list'}
+                    </Text>
+                    <View style={styles.actionButtons}>
+                      <Pressable 
+                        style={[styles.actionButton, styles.primaryButton]} 
+                        onPress={() => {
+                          onClose();
+                          router.push(`/(index)/list/${response.action?.target}`);
+                        }}
+                      >
+                        <Text style={styles.actionButtonText}>View List</Text>
+                        <Feather name="arrow-right" size={16} color="#FFFFFF" />
+                      </Pressable>
+                      <Pressable 
+                        style={[styles.actionButton, styles.secondaryButton]} 
+                        onPress={onClose}
+                      >
+                        <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>Done</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : isConfirmingTodos && response.action?.type === 'create_todo' ? (
+                  // Confirmation state
+                  <View style={styles.confirmationContainer}>
+                    <View style={styles.confirmationHeader}>
+                      <PhosphorIcon name="ListPlus" size={24} color="#2196F3" weight="duotone" />
+                      <Text style={styles.confirmationTitle}>Ready to add items</Text>
+                    </View>
+                    
+                    <View style={styles.itemsToAddContainer}>
+                      <Text style={styles.itemsToAddLabel}>
+                        Adding to {response.action.data?.listName}:
+                      </Text>
+                      {(response.action.data?.texts || [response.action.data?.text].filter(Boolean)).map((text, index) => (
+                        <View key={index} style={styles.itemToAdd}>
+                          <View style={styles.itemBullet} />
+                          <Text style={styles.itemText}>{text}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    
+                    {todoCreationError && (
+                      <View style={styles.errorBanner}>
+                        <Feather name="alert-circle" size={16} color="#EF4444" />
+                        <Text style={styles.errorBannerText}>{todoCreationError}</Text>
+                      </View>
+                    )}
+                    
+                    <View style={styles.confirmationButtons}>
+                      <Pressable 
+                        style={[styles.actionButton, styles.primaryButton, isCreatingTodos && styles.buttonDisabled]} 
+                        onPress={handleCreateTodos}
+                        disabled={isCreatingTodos}
+                      >
+                        {isCreatingTodos ? (
+                          <>
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                            <Text style={styles.actionButtonText}>Creating...</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Text style={styles.actionButtonText}>Confirm</Text>
+                            <Feather name="check" size={16} color="#FFFFFF" />
+                          </>
+                        )}
+                      </Pressable>
+                      <Pressable 
+                        style={[styles.actionButton, styles.secondaryButton]} 
+                        onPress={() => {
+                          setIsConfirmingTodos(false);
+                          setTodoCreationError(null);
+                        }}
+                        disabled={isCreatingTodos}
+                      >
+                        <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  // Default response state
+                  <>
+                    <View style={styles.responseHeader}>
+                      <Feather name="check-circle" size={24} color="#059669" />
+                      <Text style={styles.responseHeaderText}>Response ready</Text>
+                    </View>
+                    
+                    {/* Transcription disclosure */}
+                    <Pressable 
+                      style={styles.transcriptionDisclosure} 
+                      onPress={() => setIsTranscriptionExpanded(!isTranscriptionExpanded)}
+                    >
+                      <View style={styles.transcriptionHeader}>
+                        <Feather 
+                          name={isTranscriptionExpanded ? "chevron-down" : "chevron-right"} 
+                          size={16} 
+                          color="#6B7280" 
+                        />
+                        <Text style={styles.transcriptionLabel}>What I heard</Text>
+                      </View>
+                      {isTranscriptionExpanded && (
+                        <Text style={styles.transcriptionText}>"{response.transcription}"</Text>
+                      )}
+                    </Pressable>
+                    
+                    <View style={styles.responseMessageContainer}>
+                      <Text style={styles.responseText}>{response.message}</Text>
+                    </View>
+                    
+                    {/* Visual representation based on action type */}
+                    {response.action && (response.action.type === 'show_list' || response.action.type === 'show_items') && response.action.target && (
                   <View style={styles.visualContainer}>
                     {(() => {
                       const list = contextData?.lists[response.action.target];
@@ -967,7 +1376,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
                               color="#FFFFFF" 
                             />
                           </View>
-                          <Text style={[styles.listNamePreview, { color: isDark ? '#FFFFFF' : '#1F2937' }]}>
+                          <Text style={[styles.listNamePreview, { color: '#000000' }]}>
                             {list.name}
                           </Text>
                         </View>
@@ -988,15 +1397,39 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
                         }
                       ]} />
                       <View style={styles.todoContent}>
-                        <Text style={[styles.todoText, { color: isDark ? '#FFFFFF' : '#1F2937' }]}>
+                        <Text style={[styles.todoText, { color: '#000000' }]}>
                           {response.action.data.todoText || response.action.data.text || response.action.data.itemName}
                         </Text>
                         {response.action.data.listName && (
-                          <Text style={[styles.todoListName, { color: isDark ? 'rgba(255,255,255,0.6)' : '#6B7280' }]}>
+                          <Text style={[styles.todoListName, { color: '#000000' }]}>
                             {response.action.type === 'show_todo' ? 'from' : 'in'} {response.action.data.listName}
                           </Text>
                         )}
                       </View>
+                    </View>
+                  </View>
+                )}
+                
+                {/* Create todo visual representation */}
+                {response.action && response.action.type === 'create_todo' && response.action.data && (
+                  <View style={styles.visualContainer}>
+                    <View style={[styles.itemsPreview, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6' }]}>
+                      <Text style={[styles.itemsPreviewLabel, { color: '#6B7280' }]}>
+                        Items to add:
+                      </Text>
+                      {(response.action.data.texts || [response.action.data.text].filter(Boolean)).slice(0, 3).map((text, index) => (
+                        <View key={index} style={styles.itemPreviewRow}>
+                          <View style={[styles.itemPreviewCheckbox, { borderColor: isDark ? '#666' : '#D1D5DB' }]} />
+                          <Text style={[styles.itemPreviewText, { color: '#374151' }]} numberOfLines={1}>
+                            {text}
+                          </Text>
+                        </View>
+                      ))}
+                      {(response.action.data.texts?.length || 1) > 3 && (
+                        <Text style={[styles.itemsPreviewMore, { color: '#6B7280' }]}>
+                          +{(response.action.data.texts?.length || 1) - 3} more
+                        </Text>
+                      )}
                     </View>
                   </View>
                 )}
@@ -1011,6 +1444,8 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
                     </Text>
                     <Feather name="arrow-right" size={16} color="#FFFFFF" />
                   </Pressable>
+                )}
+                  </>
                 )}
               </View>
             )}
@@ -1200,5 +1635,160 @@ const styles = StyleSheet.create({
   todoListName: {
     fontSize: 12,
     marginTop: 2,
+  },
+  transcriptionDisclosure: {
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  transcriptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  transcriptionLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  transcriptionText: {
+    fontSize: 14,
+    color: '#374151',
+    marginTop: 8,
+    marginLeft: 22,
+    fontStyle: 'italic',
+  },
+  successContainer: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  successIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E8F5E9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  successMessage: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  primaryButton: {
+    backgroundColor: '#2196F3',
+    flex: 1,
+  },
+  secondaryButton: {
+    backgroundColor: '#E5E7EB',
+    flex: 1,
+  },
+  secondaryButtonText: {
+    color: '#374151',
+  },
+  confirmationContainer: {
+    paddingVertical: 20,
+  },
+  confirmationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  confirmationTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  itemsToAddContainer: {
+    backgroundColor: '#F3F4F6',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  itemsToAddLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  itemToAdd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  itemBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2196F3',
+    marginRight: 8,
+  },
+  itemText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 4,
+  },
+  errorBannerText: {
+    fontSize: 14,
+    color: '#EF4444',
+    marginLeft: 8,
+    flex: 1,
+  },
+  confirmationButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  itemsPreview: {
+    padding: 16,
+    borderRadius: 12,
+  },
+  itemsPreviewLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  itemPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  itemPreviewCheckbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  itemPreviewText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  itemsPreviewMore: {
+    fontSize: 12,
+    marginTop: 8,
   },
 });

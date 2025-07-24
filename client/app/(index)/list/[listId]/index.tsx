@@ -100,27 +100,71 @@ export default function ListDetailScreen() {
                 },
                 notes: {
                   type: Type.STRING,
+                  nullable: true,
                   description: "Additional notes or details about the todo"
                 },
                 emoji: {
                   type: Type.STRING,
+                  nullable: true,
                   description: "A relevant emoji for the todo"
                 },
                 category: {
                   type: Type.STRING,
+                  nullable: true,
                   description: "The category or grouping for the todo"
                 },
                 type: {
                   type: Type.STRING,
+                  nullable: true,
                   description: "Priority type (A-E)"
                 },
                 done: {
                   type: Type.BOOLEAN,
                   description: "Whether the todo is completed"
+                },
+                date: {
+                  type: Type.STRING,
+                  nullable: true,
+                  description: "Date associated with the todo"
+                },
+                time: {
+                  type: Type.STRING,
+                  nullable: true,
+                  description: "Time associated with the todo"
+                },
+                url: {
+                  type: Type.STRING,
+                  nullable: true,
+                  description: "URL associated with the todo"
+                },
+                email: {
+                  type: Type.STRING,
+                  nullable: true,
+                  description: "Email address associated with the todo"
+                },
+                streetAddress: {
+                  type: Type.STRING,
+                  nullable: true,
+                  description: "Street address associated with the todo"
+                },
+                number: {
+                  type: Type.NUMBER,
+                  nullable: true,
+                  description: "A numeric value associated with the todo"
+                },
+                amount: {
+                  type: Type.NUMBER,
+                  nullable: true,
+                  description: "A monetary amount associated with the todo"
+                },
+                fiveStarRating: {
+                  type: Type.NUMBER,
+                  nullable: true,
+                  description: "A rating from 1 to 5"
                 }
               },
               required: ["text", "done"],
-              propertyOrdering: ["text", "notes", "emoji", "category", "type", "done"]
+              propertyOrdering: ["text", "notes", "emoji", "category", "type", "done", "date", "time", "url", "email", "streetAddress", "number", "amount", "fiveStarRating"]
             }
           }
         },
