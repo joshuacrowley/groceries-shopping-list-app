@@ -51,4 +51,4 @@ export const SCHEMA = {
     code: { type: "string" },
     type: { type: "string", default: "Info", allow: [...LIST_TYPE, "Offload"] },
   },
-};
+} as const;

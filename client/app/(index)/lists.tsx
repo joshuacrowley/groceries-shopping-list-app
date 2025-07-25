@@ -3,8 +3,14 @@ import { View, StyleSheet, SafeAreaView, Platform, StatusBar } from 'react-nativ
 import { router } from 'expo-router';
 import { useAddRowCallback } from 'tinybase/ui-react';
 import ListsNavigator from '@/components/ListsNavigator';
+import { useThemeColor } from '@/hooks/useThemeColor';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function ListsScreen() {
+  const backgroundColor = useThemeColor({}, 'background');
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  
   const addList = useAddRowCallback(
     'lists',
     () => ({
@@ -28,8 +34,8 @@ export default function ListsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.container, { backgroundColor }]}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={backgroundColor} />
       <ListsNavigator onCreateList={handleCreateList} />
     </SafeAreaView>
   );
@@ -38,7 +44,6 @@ export default function ListsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
 });

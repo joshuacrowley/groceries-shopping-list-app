@@ -17,7 +17,7 @@ import {
   useRow,
 } from "tinybase/ui-react";
 import { chakraColors, spacing, radii } from '@/constants/Colors';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI, Type } from '@google/genai';
 import Constants from 'expo-constants';
 
 // Initialize Gemini with API key from environment
@@ -26,40 +26,7 @@ const getGeminiAPI = () => {
   if (!apiKey) {
     throw new Error("Google AI API key not found. Please set EXPO_PUBLIC_GOOGLE_AI_API_KEY in your environment.");
   }
-  return new GoogleGenerativeAI(apiKey);
-};
-
-// Define the schema for structured output
-const todoSchema = {
-  type: SchemaType.OBJECT,
-  properties: {
-    todos: {
-      type: SchemaType.ARRAY,
-      items: {
-        type: SchemaType.OBJECT,
-        properties: {
-          text: { type: SchemaType.STRING, description: "The main text of the todo item" },
-          notes: { type: SchemaType.STRING, description: "Additional notes about the todo" },
-          emoji: { type: SchemaType.STRING, description: "A relevant emoji for the todo" },
-          category: { type: SchemaType.STRING, description: "The category of the todo" },
-          type: { type: SchemaType.STRING, description: "The type of the todo (A-E)" },
-          done: { type: SchemaType.BOOLEAN, description: "Whether the todo is completed" },
-        },
-        required: ["text", "emoji", "category", "type", "done"]
-      }
-    }
-  },
-  required: ["todos"]
-};
-
-// Timeout wrapper function
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
-    )
-  ]);
+  return new GoogleGenAI({ apiKey });
 };
 
 // Call Gemini API directly
@@ -72,35 +39,48 @@ const callGeminiAPI = async (
   console.log("Initializing Gemini API...");
   const genAI = getGeminiAPI();
 
-  const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro",
-    generationConfig: {
-      temperature: 0.7,
-      topK: 32,
-      topP: 1,
-      maxOutputTokens: 2048,
-      responseMimeType: "application/json",
-      responseSchema: todoSchema,
+  // Define the response schema for structured output
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      todos: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            text: {
+              type: Type.STRING,
+              description: "The main text of the todo item"
+            },
+            notes: {
+              type: Type.STRING,
+              description: "Additional notes about the todo"
+            },
+            emoji: {
+              type: Type.STRING,
+              description: "A relevant emoji for the todo"
+            },
+            category: {
+              type: Type.STRING,
+              description: "The category of the todo"
+            },
+            type: {
+              type: Type.STRING,
+              description: "The type of the todo (A-E)"
+            },
+            done: {
+              type: Type.BOOLEAN,
+              description: "Whether the todo is completed"
+            }
+          },
+          required: ["text", "done"],
+          propertyOrdering: ["text", "notes", "emoji", "category", "type", "done"]
+        }
+      }
     },
-    safetySettings: [
-      {
-        category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-      {
-        category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-        threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-      },
-    ],
-  });
+    required: ["todos"],
+    propertyOrdering: ["todos"]
+  };
 
   const prompt = `Analyze this image and create todo items based on it.
   Current List Information:
@@ -111,30 +91,43 @@ const callGeminiAPI = async (
   
   To help you understand the schema of a todo for this list, here's the current todos: ${JSON.stringify(currentTodos)}
   Generate relevant, specific, and contextual todo items that match the style and purpose of the current list.
-  Please only provide the new todos, not the existing todos provided for context.
-  `;
+  Please only provide the new todos, not the existing todos provided for context.`;
 
   console.log("Making request to Gemini API...");
 
-  // Wrap the generateContent call with timeout
-  const result = await withTimeout(
-    model.generateContent([
+  try {
+    const contents = [
       {
         inlineData: {
-          data: image,
           mimeType: mimeType,
+          data: image,
         }
       },
-      prompt
-    ]),
-    25000 // 25 seconds timeout
-  );
+      { text: prompt }
+    ];
 
-  const response = result.response.text();
-  console.log("Raw Gemini response:", response);
-  
-  const todos = JSON.parse(response);
-  return todos;
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: contents,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: responseSchema
+      }
+    });
+
+    // Get the response text directly - it will be valid JSON due to structured output
+    const text = response.text;
+    
+    console.log("Gemini response received");
+    console.log("Structured response:", text);
+    
+    // Parse the JSON response directly
+    const parsedResponse = JSON.parse(text);
+    return parsedResponse;
+  } catch (error) {
+    console.error("Gemini API error:", error);
+    throw error;
+  }
 };
 
 interface PhotoUploaderProps {
@@ -255,11 +248,11 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
       console.log("Launching image library...");
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
-        base64: false,
+        quality: 0.3, // Reduce quality for faster processing
+        base64: true, // Enable base64 encoding
       });
 
       console.log("Image library result:", result);
@@ -282,7 +275,10 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
     
     try {
       console.log("Calling handlePhotoSelected with URI:", asset.uri);
-      await handlePhotoSelected(asset.uri, asset.mimeType || 'image/jpeg');
+      console.log("Base64 data available:", !!asset.base64);
+      
+      // Pass the base64 data directly if available
+      await handlePhotoSelected(asset.uri, asset.mimeType || 'image/jpeg', asset.base64);
     } catch (error) {
       console.error("Error processing image:", error);
       Alert.alert(
@@ -310,15 +306,16 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
   };
 
   const handlePhotoSelected = useCallback(
-    async (uri: string, mimeType: string) => {
+    async (uri: string, mimeType: string, base64Data?: string) => {
       console.log("Platform:", Platform.OS);
+      console.log("Base64 data provided:", !!base64Data);
       
       const currentTodos = todoIds
         .slice(0, 5)
         .map((id) => store.getRow("todos", id));
 
       try {
-        const base64Image = await convertUriToBase64(uri);
+        const base64Image = base64Data || await convertUriToBase64(uri);
         
         console.log("Calling Google Gemini API directly...");
         

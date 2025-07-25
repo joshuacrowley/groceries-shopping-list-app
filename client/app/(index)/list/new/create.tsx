@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Link, Stack, useRouter } from "expo-router";
-import { StyleSheet, Text, View, ScrollView, Pressable } from "react-native";
+import { Link, Stack, useRouter, useLocalSearchParams } from "expo-router";
+import { StyleSheet, Text, View, ScrollView, Pressable, Alert, SafeAreaView } from "react-native";
 import { BodyScrollView } from "@/components/ui/BodyScrollView";
 import Button from "@/components/ui/button";
 import TextInput from "@/components/ui/text-input";
@@ -8,17 +8,23 @@ import { appleBlue, backgroundColors, emojies } from "@/constants/Colors";
 import { useListCreation } from "@/context/ListCreationContext";
 import { useAddShoppingListCallback } from "@/stores/ShoppingListsStore";
 import { LIST_TYPE, BACKGROUND_COLOUR } from "@/stores/schema";
+import catalogue from '../../../../catalogue.json';
 
-// Available templates - key ones to show in UI
+// Get available templates from catalogue, filtered and formatted for UI
 const AVAILABLE_TEMPLATES = [
-  { id: "", name: "Default", description: "Basic todo list functionality" },
-  { id: "ShoppingListv2", name: "Shopping List", description: "Categorized grocery list with prices and notes" },
-  { id: "Basic", name: "Simple List", description: "Clean and minimal list interface" },
-  { id: "Focus", name: "Focus List", description: "Narrow down to focus on one thing at a time" },
-  { id: "HabitTracker", name: "Habit Tracker", description: "Track daily habits and routines" },
-  { id: "MealPlanningAssistant", name: "Meal Planner", description: "Plan your weekly meals" },
-  { id: "Christmas", name: "Christmas List", description: "Holiday planning and gift tracking" },
-  { id: "DecisionLog", name: "Decision Log", description: "Track and categorize important decisions" },
+  { id: "", name: "Default", description: "Basic todo list functionality", type: "Info" },
+  ...catalogue
+    .filter(template => template.published)
+    .map(template => ({
+      id: template.template,
+      name: template.name,
+      description: template.purpose,
+      type: template.type,
+      systemPrompt: template.systemPrompt || '',
+      backgroundColour: template.backgroundColour || 'blue',
+      icon: template.icon || '📝'
+    }))
+    .slice(0, 20) // Limit to top 20 for UI performance
 ];
 
 // Helper function to map schema colors to actual color values
@@ -43,13 +49,17 @@ export default function CreateListScreen() {
   const [number, setNumber] = useState<string>("");
   const [template, setTemplate] = useState("");
   const [code, setCode] = useState("");
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [createdListId, setCreatedListId] = useState<string>("");
   const { selectedEmoji, setSelectedEmoji, selectedColor, setSelectedColor } =
     useListCreation();
 
   const router = useRouter();
-  const useAddShoppingList = useAddShoppingListCallback();
+  const params = useLocalSearchParams();
+  const addShoppingList = useAddShoppingListCallback();
 
   useEffect(() => {
+    // Set random defaults only once
     setSelectedEmoji(emojies[Math.floor(Math.random() * emojies.length)]);
     setSelectedColor(
       backgroundColors[Math.floor(Math.random() * backgroundColors.length)]
@@ -61,14 +71,45 @@ export default function CreateListScreen() {
       setSelectedEmoji("");
       setSelectedColor("");
     };
-  }, []);
+  }, []); // Remove params dependency to prevent infinite loop
+
+  // Separate useEffect for handling URL parameters
+  useEffect(() => {
+    // Handle URL parameters for voice/photo creation
+    if (params.selectedTemplate) {
+      const selectedTemplateData = AVAILABLE_TEMPLATES.find(t => t.id === params.selectedTemplate);
+      if (selectedTemplateData) {
+        setTemplate(params.selectedTemplate as string);
+        setSystemPrompt(selectedTemplateData.systemPrompt);
+        setBackgroundColour(selectedTemplateData.backgroundColour);
+        setSelectedType(selectedTemplateData.type);
+        setIcon(selectedTemplateData.icon);
+      }
+    }
+    
+    if (params.description) {
+      setPurpose(params.description as string);
+    }
+
+    if (params.fromVoice === 'true') {
+      setListName(params.suggestedName as string || `Voice-created list`);
+    }
+
+    if (params.fromPhoto === 'true') {
+      setListName(params.suggestedName as string || `Photo-based list`);
+      
+      if (params.suggestedIcon) {
+        setIcon(params.suggestedIcon as string);
+      }
+    }
+  }, [params.selectedTemplate, params.description, params.fromVoice, params.fromPhoto, params.suggestedName, params.suggestedIcon, params.photoUri, params.photoAnalysis]); // Only depend on specific param values
 
   const handleCreateList = () => {
     if (!listName) {
       return;
     }
 
-    const listId = useAddShoppingList(
+    const listId = addShoppingList(
       listName,
       purpose,
       selectedEmoji || icon,
@@ -80,9 +121,42 @@ export default function CreateListScreen() {
       code
     );
 
+    setCreatedListId(listId);
+
+    // Show follow-up modal for voice/photo creation with AI todo generation
+    if ((params.fromVoice === 'true' || params.fromPhoto === 'true') && systemPrompt) {
+      setShowFollowUpModal(true);
+    } else {
+      router.replace({
+        pathname: "/list/[listId]",
+        params: { listId },
+      });
+    }
+  };
+
+  const handleGenerateTodos = async () => {
+    setShowFollowUpModal(false);
+    // Navigate to list and show loading/generation state
     router.replace({
       pathname: "/list/[listId]",
-      params: { listId },
+      params: { 
+        listId: createdListId,
+        generateTodos: 'true',
+        systemPrompt: systemPrompt,
+        description: purpose || params.description as string || '',
+        photoUri: params.photoUri as string || '',
+        photoAnalysis: params.photoAnalysis as string || '',
+        fromVoice: params.fromVoice as string || '',
+        fromPhoto: params.fromPhoto as string || ''
+      },
+    });
+  };
+
+  const handleSkipTodos = () => {
+    setShowFollowUpModal(false);
+    router.replace({
+      pathname: "/list/[listId]",
+      params: { listId: createdListId },
     });
   };
 
@@ -128,13 +202,25 @@ export default function CreateListScreen() {
   };
 
   return (
-    <>
+    <SafeAreaView style={styles.container}>
       <Stack.Screen
         options={{
-          headerLargeTitle: false,
-          headerTitle: "New list",
+          headerShown: false, // Hide the default header to prevent overlap
         }}
       />
+      
+      {/* Custom Header */}
+      <View style={styles.customHeader}>
+        <Button
+          variant="ghost"
+          onPress={() => router.back()}
+          textStyle={styles.cancelButtonText}
+        >
+          Cancel
+        </Button>
+        <Text style={styles.headerTitle}>New list</Text>
+        <View style={styles.headerSpacer} />
+      </View>
       <BodyScrollView contentContainerStyle={styles.scrollViewContent}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Basic Information</Text>
@@ -219,7 +305,21 @@ export default function CreateListScreen() {
                   styles.templateOption,
                   template === templateOption.id && styles.selectedTemplateOption
                 ]}
-                onPress={() => setTemplate(templateOption.id)}
+                onPress={() => {
+                  setTemplate(templateOption.id);
+                  // Auto-populate system prompt and other fields when template is selected
+                  if (templateOption.id && templateOption.systemPrompt) {
+                    setSystemPrompt(templateOption.systemPrompt);
+                  } else {
+                    setSystemPrompt('');
+                  }
+                  if (templateOption.backgroundColour) {
+                    setBackgroundColour(templateOption.backgroundColour);
+                  }
+                  if (templateOption.type) {
+                    setSelectedType(templateOption.type);
+                  }
+                }}
               >
                 <View style={styles.templateContent}>
                   <Text style={[
@@ -294,11 +394,66 @@ export default function CreateListScreen() {
           Create 10 test lists
         </Button>
       </BodyScrollView>
-    </>
+
+      {/* Follow-up Modal for AI Todo Generation */}
+      {showFollowUpModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.followUpModal}>
+            <Text style={styles.followUpTitle}>List Created Successfully!</Text>
+            <Text style={styles.followUpSubtitle}>
+              Would you like me to create todos for this list using AI? 
+              I'll use the template's system prompt to generate relevant tasks based on your description.
+            </Text>
+            
+            <View style={styles.followUpButtons}>
+              <Pressable 
+                style={[styles.followUpButton, styles.generateButton]} 
+                onPress={handleGenerateTodos}
+              >
+                <Text style={styles.generateButtonText}>Generate Todos</Text>
+              </Pressable>
+              
+              <Pressable 
+                style={[styles.followUpButton, styles.skipButton]} 
+                onPress={handleSkipTodos}
+              >
+                <Text style={styles.skipButtonText}>No Thanks</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E9EA',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  cancelButtonText: {
+    color: '#007AFF',
+    fontSize: 16,
+  },
+  headerSpacer: {
+    width: 60, // Same width as cancel button to center title
+  },
   scrollViewContent: {
     padding: 16,
   },
@@ -435,5 +590,72 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  followUpModal: {
+    backgroundColor: '#fff',
+    margin: 20,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  followUpTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1f2937',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  followUpSubtitle: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  followUpButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  followUpButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  generateButton: {
+    backgroundColor: appleBlue,
+  },
+  skipButton: {
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  generateButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  skipButtonText: {
+    color: '#374151',
+    fontSize: 16,
+    fontWeight: '500',
   },
 });

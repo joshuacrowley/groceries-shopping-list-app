@@ -17,6 +17,8 @@ import {
   useCreateRelationships,
 } from "tinybase/ui-react";
 import { createWsSynchronizer } from "tinybase/synchronizers/synchronizer-ws-client";
+import { createExpoSqlitePersister } from "tinybase/persisters/persister-expo-sqlite";
+import * as SQLite from "expo-sqlite";
 import { SCHEMA } from "./schema";
 
 // Enable detailed logging
@@ -55,6 +57,10 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   const { getToken } = useAuth();
   const [serverPath, setServerPath] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isPersisterReady, setIsPersisterReady] = useState(false);
+
+  // Generate a stable store ID based on organization
+  const storeId = organization?.id ? `ttt-store-${organization.id}` : null;
 
   // Initialize main store
   const store = useCreateMergeableStore(() => {
@@ -106,8 +112,28 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
     )
   );
 
-  // No local persistence for now, using memory-only store
-  // We'll rely on server synchronization for data persistence
+  // Set up local persistence with SQLite
+  useCreatePersister(
+    store,
+    (store) => {
+      const db = SQLite.openDatabaseSync(storeId || "default-store" + ".db");
+      return createExpoSqlitePersister(store, db);
+    },
+    [storeId],
+    async (persister) => {
+      await persister.load();
+      // Temporarily disable auto-save to prevent potential sync loops
+      // The WebSocket synchronizer already handles persistence to the server
+      // await persister.startAutoSave();
+      
+      // TO RE-ENABLE: Uncomment the line above after confirming the sync loop is fixed
+      // Auto-save provides offline persistence between app restarts
+      
+      debugLog("Local persister loaded and ready");
+      setIsPersisterReady(true);
+    },
+    [storeId]
+  );
 
   // Set up organization path for synchronization
   useEffect(() => {
@@ -133,10 +159,11 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   useCreateSynchronizer(
     store,
     async (store: MergeableStore) => {
-      if (!isInitialized || !serverPath) {
+      if (!isInitialized || !serverPath || !isPersisterReady) {
         debugLog("Waiting for initialization...", {
           isInitialized,
           serverPath,
+          isPersisterReady,
         });
         return null;
       }
@@ -166,7 +193,12 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
         debugLog("WebSocket URL:", wsUrl.toString());
 
-        const ws = new ReconnectingWebSocket(wsUrl.toString());
+        const ws = new ReconnectingWebSocket(wsUrl.toString(), [], {
+          maxReconnectionDelay: 10000,  // Increase max delay to 10 seconds
+          connectionTimeout: 5000,       // Increase connection timeout to 5 seconds
+          reconnectionDelayGrowFactor: 1.5,  // Slower reconnection backoff
+          maxRetries: 10,  // Limit reconnection attempts
+        });
 
         ws.addEventListener("open", () => {
           debugLog("WebSocket connected successfully", {
@@ -208,6 +240,8 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         
         // IMPORTANT: Load data from server BEFORE starting sync
         // This prevents the empty client state from overwriting server data
+        // Note: We've already loaded from local SQLite persistence above,
+        // so now we load the latest from server to merge any remote changes
         debugLog("Loading initial data from server...");
         await synchronizer.load();
         
@@ -218,16 +252,9 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         // If the websocket reconnects, get a fresh token and reconnect
         synchronizer.getWebSocket().addEventListener("open", () => {
           debugLog("WebSocket reconnected, refreshing connection...");
-          getToken()
-            .then((freshToken) => {
-              if (freshToken) {
-                wsUrl.searchParams.set("token", freshToken);
-                return synchronizer.load().then(() => synchronizer.save());
-              }
-            })
-            .catch((error) => {
-              console.error("Error refreshing token:", error);
-            });
+          // Note: We don't need to manually load/save here - TinyBase handles
+          // the sync protocol automatically. The synchronizer is already running
+          // and will sync any changes as needed.
         });
 
         return synchronizer;
@@ -236,7 +263,7 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         return null;
       }
     },
-    [isInitialized, serverPath, organization?.id]
+    [isInitialized, serverPath, organization?.id, isPersisterReady]
   );
 
   return (

@@ -19,6 +19,8 @@ import { useEffect, useState } from "react";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useStore, useRowIds } from 'tinybase/ui-react';
 import Constants from 'expo-constants';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { useThemeColor } from '@/hooks/useThemeColor';
 
 export default function ProfileScreen() {
   const { user } = useUser();
@@ -29,6 +31,15 @@ export default function ProfileScreen() {
   const listIds = useRowIds('lists') || [];
   const router = useRouter();
   const [showDebug, setShowDebug] = useState(false);
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  
+  // Theme-aware colors
+  const backgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
+  const iconColor = useThemeColor({}, 'icon');
+  const sectionBgColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(150, 150, 150, 0.1)';
+  const closeButtonBgColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(150, 150, 150, 0.1)';
 
   const { isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
 
@@ -107,10 +118,10 @@ export default function ProfileScreen() {
   };
 
   return (
-    <BodyScrollView contentContainerStyle={styles.container}>
+    <BodyScrollView style={{ backgroundColor }} contentContainerStyle={styles.container}>
       <View style={styles.closeButtonContainer}>
-        <Pressable onPress={() => router.push('/(index)')} style={styles.closeButton}>
-          <IconSymbol name="xmark" size={18} color="gray" />
+        <Pressable onPress={() => router.push('/(index)')} style={[styles.closeButton, { backgroundColor: closeButtonBgColor }]}>
+          <IconSymbol name="xmark" size={18} color={iconColor} />
         </Pressable>
       </View>
       <View>
@@ -145,7 +156,7 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       </View>
-      <View style={styles.section}>
+      <View style={[styles.section, { backgroundColor: sectionBgColor }]}>
         <ThemedText type="defaultSemiBold" style={styles.appTitle}>
           Shopping List: Sync & Share
         </ThemedText>
@@ -154,7 +165,7 @@ export default function ProfileScreen() {
         </ThemedText>
       </View>
 
-      <View style={styles.section}>
+      <View style={[styles.section, { backgroundColor: sectionBgColor }]}>
         <View style={styles.infoRow}>
           <ThemedText type="defaultSemiBold">Channel</ThemedText>
           <ThemedText type="defaultSemiBold">{Updates.channel}</ThemedText>
@@ -228,9 +239,9 @@ export default function ProfileScreen() {
       </Button>
 
       {/* Debug Section */}
-      <View style={styles.section}>
+      <View style={[styles.section, { backgroundColor: sectionBgColor }]}>
         <Pressable onPress={() => setShowDebug(!showDebug)} style={styles.debugToggle}>
-          <ThemedText type="defaultSemiBold" style={styles.debugToggleText}>
+          <ThemedText type="defaultSemiBold" style={[styles.debugToggleText, { color: isDark ? '#999' : '#666' }]}>
             {showDebug ? '▼' : '▶'} Debug Info
           </ThemedText>
         </Pressable>
@@ -313,7 +324,6 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 8,
     borderRadius: 16,
-    backgroundColor: "rgba(150, 150, 150, 0.1)",
   },
   header: {
     flexDirection: "row",
@@ -347,7 +357,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   section: {
-    backgroundColor: "rgba(150, 150, 150, 0.1)",
     borderRadius: 12,
     padding: 16,
     paddingVertical: 8,

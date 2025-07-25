@@ -208,15 +208,6 @@ const SyncedWebSocketStore: React.FC<{ children: React.ReactNode }> = ({
         const synchronizer = await createWsSynchronizer(store, ws, 1);
         await synchronizer.startSync();
 
-        // If the websocket reconnects, get a fresh token and reconnect
-        synchronizer.getWebSocket().addEventListener("open", async () => {
-          const freshToken = await getToken();
-          if (freshToken) {
-            wsUrl.searchParams.set("token", freshToken);
-            synchronizer.load().then(() => synchronizer.save());
-          }
-        });
-
         return synchronizer;
       } catch (error) {
         console.error("Error in createWsSynchronizer:", error);
