@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAreaView, ScrollView, StatusBar, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAreaView, ScrollView, StatusBar, Animated, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -7,8 +7,11 @@ import { useStore, useRowIds, useAddRowCallback, useRow } from 'tinybase/ui-reac
 import { useOrganization, useAuth, useUser, useClerk } from '@clerk/clerk-expo';
 import TodoList from '@/Basic';
 import ListItem from '@/components/ListItem';
+import ListCard, { CARD_WIDTH, CARD_MARGIN } from '@/components/ListCard';
 import VoiceModal from '@/components/VoiceModal';
 import ListCreationOptionsModal from '@/components/ListCreationOptionsModal';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { LIST_TYPE } from '@/stores/schema';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -126,8 +129,7 @@ export default function HomeScreen() {
     () => ({
       name: "New List",
       purpose: "A simple, flexible todo list for all your tasks and ideas",
-      icon: '',
-      iconName: 'ListChecks',
+      icon: 'ListChecks',
       backgroundColour: 'blue',
       type: 'Home',
       systemPrompt: '',
@@ -157,6 +159,10 @@ export default function HomeScreen() {
 
   const renderListItem = ({ item: listId }) => {
     return <ListItem listId={listId} onPress={handleListPress} />;
+  };
+
+  const renderListCard = ({ item: listId }) => {
+    return <ListCard listId={listId} onPress={handleListPress} />;
   };
 
   const handleCreateList = () => {
@@ -221,64 +227,8 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Primary Voice Interface */}
-      <View style={[styles.voiceSection, { backgroundColor: cardBg }]}>
-        <Animated.View
-          style={{
-            transform: [{ scale: voiceButtonScale }]
-          }}
-        >
-          <Pressable
-            style={[styles.primaryVoiceButton, { backgroundColor: primaryGreen, shadowColor: isDark ? 'transparent' : primaryGreen }]}
-            onPressIn={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              
-              // Animate button scale down
-              Animated.spring(voiceButtonScale, {
-                toValue: 0.95,
-                useNativeDriver: true,
-                speed: 50,
-                bounciness: 0,
-              }).start();
-              
-              setVoiceModalVisible(true);
-              setIsRecording(true);
-            }}
-            onPressOut={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              
-              // Animate button scale back to normal
-              Animated.spring(voiceButtonScale, {
-                toValue: 1,
-                useNativeDriver: true,
-                speed: 50,
-                bounciness: 10,
-              }).start();
-              
-              // Signal to stop recording but keep modal open
-              setIsRecording(false);
-            }}
-          >
-            <Feather name="mic" size={32} color="#FFFFFF" />
-            <Text style={styles.voiceButtonText}>Ask me anything</Text>
-          </Pressable>
-        </Animated.View>
-        <Animated.Text 
-          style={[
-            styles.voiceInstructions, 
-            { 
-              color: secondaryText,
-              opacity: instructionOpacity,
-            }
-          ]}
-        >
-          Press and hold to talk
-        </Animated.Text>
-      </View>
-
-      {/* Topic Filters */}
-      <View style={[styles.filtersSection, { backgroundColor: cardBg, borderBottomColor: borderColor }]}>
-        <Text style={[styles.filtersTitle, { color: primaryText }]}>Topics</Text>
+      {/* Compact Filters Row */}
+      <View style={styles.filtersRow}>
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false}
@@ -300,22 +250,20 @@ export default function HomeScreen() {
             </Pressable>
           ))}
         </ScrollView>
-      </View>
-
-      {/* Sort Controls */}
-      <View style={[styles.sortSection, { backgroundColor: cardBg, borderBottomColor: borderColor }]}>
-        <Pressable 
-          style={[styles.sortButton, { backgroundColor: sortBy === 'name' ? lightBlue : chipBg }]}
-          onPress={() => setSortBy('name')}
-        >
-          <Text style={[styles.sortText, { color: sortBy === 'name' ? blueText : secondaryText }]}>A-Z</Text>
-        </Pressable>
-        <Pressable 
-          style={[styles.sortButton, { backgroundColor: sortBy === 'todos' ? lightBlue : chipBg }]}
-          onPress={() => setSortBy('todos')}
-        >
-          <Text style={[styles.sortText, { color: sortBy === 'todos' ? blueText : secondaryText }]}>To-dos</Text>
-        </Pressable>
+        <View style={styles.sortControls}>
+          <Pressable 
+            style={[styles.sortButton, { backgroundColor: sortBy === 'name' ? lightBlue : chipBg }]}
+            onPress={() => setSortBy('name')}
+          >
+            <Text style={[styles.sortText, { color: sortBy === 'name' ? blueText : secondaryText }]}>A-Z</Text>
+          </Pressable>
+          <Pressable 
+            style={[styles.sortButton, { backgroundColor: sortBy === 'todos' ? lightBlue : chipBg }]}
+            onPress={() => setSortBy('todos')}
+          >
+            <Feather name="check-square" size={12} color={sortBy === 'todos' ? blueText : secondaryText} />
+          </Pressable>
+        </View>
       </View>
       
       {/* Lists */}
@@ -344,11 +292,61 @@ export default function HomeScreen() {
       ) : (
         <FlatList
           data={filteredAndSortedLists}
-          renderItem={renderListItem}
+          renderItem={renderListCard}
           keyExtractor={(item) => item}
-          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listCardsContainer}
         />
       )}
+
+      {/* Floating Voice Pill */}
+      <Animated.View
+        style={[
+          styles.floatingVoicePill,
+          { transform: [{ scale: voiceButtonScale }] }
+        ]}
+      >
+        <Pressable
+          style={[
+            styles.voicePillButton,
+            { 
+              backgroundColor: isRecording ? primaryGreen : (isDark ? '#1F2937' : '#FFFFFF'),
+              shadowColor: isDark ? 'transparent' : '#000',
+            }
+          ]}
+          onPressIn={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Animated.spring(voiceButtonScale, {
+              toValue: 0.95,
+              useNativeDriver: true,
+              speed: 50,
+              bounciness: 0,
+            }).start();
+            setVoiceModalVisible(true);
+            setIsRecording(true);
+          }}
+          onPressOut={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            Animated.spring(voiceButtonScale, {
+              toValue: 1,
+              useNativeDriver: true,
+              speed: 50,
+              bounciness: 10,
+            }).start();
+            setIsRecording(false);
+          }}
+        >
+          <View style={[styles.voicePillIcon, { backgroundColor: primaryGreen }]}>
+            <Feather name="mic" size={14} color="#FFFFFF" />
+          </View>
+          <Text style={[
+            styles.voicePillText,
+            { color: isRecording ? '#FFFFFF' : secondaryText }
+          ]}>
+            Ask anything...
+          </Text>
+        </Pressable>
+      </Animated.View>
 
       {/* Floating Create List Button */}
       <Pressable
@@ -404,20 +402,21 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   orgHeader: {
-    paddingTop: 16,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingTop: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
   },
   orgName: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
   },
   headerButtons: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   navButton: {
@@ -473,7 +472,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   listContainer: {
-    padding: 16,
+    padding: 12,
+  },
+  listCardsContainer: {
+    paddingTop: 12,
+    paddingBottom: 100,
   },
 
   emptyState: {
@@ -527,90 +530,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.5,
   },
-  // Voice Interface
-  voiceSection: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  primaryVoiceButton: {
-    paddingVertical: 20,
-    paddingHorizontal: 40,
-    borderRadius: 25,
+  // Compact Filters Row
+  filtersRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    minWidth: 200,
-    justifyContent: 'center',
-  },
-  voiceButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  voiceInstructions: {
-    fontSize: 14,
-    marginTop: 12,
-    fontWeight: '500',
-  },
-
-  // Topic Filters
-  filtersSection: {
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-  },
-  filtersTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    paddingHorizontal: 20,
-    marginBottom: 12,
+    paddingVertical: 8,
+    paddingRight: 12,
   },
   topicFilters: {
-    paddingHorizontal: 16,
-    gap: 8,
+    paddingLeft: 12,
+    paddingRight: 8,
+    gap: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   topicChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginHorizontal: 4,
-  },
-  topicChipActive: {
-    // Dynamic styles applied inline
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   topicText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
-  topicTextActive: {
-    // Dynamic styles applied inline
-  },
-
-  // Sort Controls
-  sortSection: {
+  sortControls: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    gap: 8,
-    borderBottomWidth: 1,
+    gap: 4,
+    marginLeft: 'auto',
   },
   sortButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  sortButtonActive: {
-    // Dynamic styles applied inline
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   sortText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
-  },
-  sortTextActive: {
-    // Dynamic styles applied inline
   },
 
   // Empty Filter State
@@ -627,18 +582,51 @@ const styles = StyleSheet.create({
   },
 
   // Floating Create Button
-  floatingCreateButton: {
+  // Floating Voice Pill
+  floatingVoicePill: {
     position: 'absolute',
-    bottom: 30,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    bottom: 24,
+    left: 16,
+    right: 80,
+  },
+  voicePillButton: {
+    height: 44,
+    borderRadius: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 4,
+    paddingRight: 16,
+    gap: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  voicePillIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+  },
+  voicePillText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+
+  // Floating Create Button
+  floatingCreateButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 16,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });

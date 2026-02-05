@@ -2,5 +2,15 @@
   "amp.commands.allowlist": [
     "rm client/app/(index)/_layout.fixed.tsx",
     "rm client/app/\\(index\\)/_layout.fixed.tsx"
-  ]
+  ],
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#E6B800",
+    "titleBar.activeForeground": "#1a1a1a",
+    "titleBar.inactiveBackground": "#CCAA00",
+    "titleBar.inactiveForeground": "#333333",
+    "activityBar.background": "#E6B800",
+    "activityBar.foreground": "#1a1a1a",
+    "statusBar.background": "#E6B800",
+    "statusBar.foreground": "#1a1a1a"
+  }
 }
