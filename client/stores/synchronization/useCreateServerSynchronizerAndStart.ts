@@ -41,8 +41,10 @@ export const useCreateServerSynchronizerAndStart = <
       const synchronizer = await createWsSynchronizer(
         store,
         new ReconnectingWebSocket(wsUrl, [], {
-          maxReconnectionDelay: 1000,
-          connectionTimeout: 1000,
+          maxReconnectionDelay: 10000,  // Increase max delay to 10 seconds
+          connectionTimeout: 5000,       // Increase connection timeout to 5 seconds
+          reconnectionDelayGrowFactor: 1.5,  // Slower reconnection backoff
+          maxRetries: 10,  // Limit reconnection attempts
         })
       );
 
@@ -53,10 +55,9 @@ export const useCreateServerSynchronizerAndStart = <
       // Start the synchronizer.
       await synchronizer.startSync();
 
-      // If the websocket reconnects in the future, do another explicit sync.
-      synchronizer.getWebSocket().addEventListener("open", () => {
-        synchronizer.load().then(() => synchronizer.save());
-      });
+      // Note: We don't need to handle reconnection explicitly - TinyBase's
+      // synchronizer manages the sync protocol automatically. When the WebSocket
+      // reconnects, it will resume syncing from where it left off.
 
       return synchronizer;
     },

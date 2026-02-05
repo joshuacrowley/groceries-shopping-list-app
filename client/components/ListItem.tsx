@@ -3,72 +3,66 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRow, useLocalRowIds } from 'tinybase/ui-react';
 import PhosphorIcon from './PhosphorIcon';
-import { 
-  chakraColors, 
-  typography, 
-  spacing, 
-  radii, 
-  shadows 
-} from '@/constants/Colors';
+import { chakraColors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
+
+// Brand colors matching ListCard
+const BRAND_COLORS = {
+  blue: '#3B82F6',
+  green: '#22C55E',
+  red: '#EF4444',
+  yellow: '#F59E0B',
+  purple: '#8B5CF6',
+  teal: '#14B8A6',
+  orange: '#F97316',
+  pink: '#EC4899',
+  cyan: '#06B6D4',
+  gray: '#6B7280',
+};
 
 const ListItem = ({ listId, onPress }) => {
   const list = useRow('lists', listId);
   const todoIds = useLocalRowIds('todoList', listId);
   const todoCount = todoIds?.length || 0;
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   
   if (!list) return null;
   
-  // Chakra UI color mappings for backgrounds
-  const bgColorMap = {
-    blue: chakraColors.blue[50],
-    green: chakraColors.green[50], 
-    red: chakraColors.red[50],
-    yellow: chakraColors.yellow[50],
-    purple: chakraColors.purple[50],
-    teal: chakraColors.teal[50],
-    gray: chakraColors.gray[50],
-    orange: chakraColors.orange[50],
-    pink: chakraColors.pink[50],
-    cyan: chakraColors.cyan[50],
-  };
+  const iconBgColor = BRAND_COLORS[list.backgroundColour as keyof typeof BRAND_COLORS] || BRAND_COLORS.blue;
+  const bgColor = isDark ? '#1F2937' : '#FFFFFF';
+  const textColor = isDark ? '#F9FAFB' : '#111827';
+  const countTextColor = isDark ? '#9CA3AF' : '#6B7280';
+  const chevronColor = isDark ? '#6B7280' : '#9CA3AF';
   
-  // Border colors for selected state
-  const borderColorMap = {
-    blue: chakraColors.blue[500],
-    green: chakraColors.green[500],
-    red: chakraColors.red[500], 
-    yellow: chakraColors.yellow[500],
-    purple: chakraColors.purple[500],
-    teal: chakraColors.teal[500],
-    gray: chakraColors.gray[500],
-    orange: chakraColors.orange[500],
-    pink: chakraColors.pink[500],
-    cyan: chakraColors.cyan[500],
-  };
-  
-  const bgColor = bgColorMap[list.backgroundColour] || chakraColors.blue[50];
-  const borderColor = borderColorMap[list.backgroundColour] || chakraColors.blue[500];
+  // Check if icon is an emoji or a Phosphor icon name
+  const iconValue = String(list.icon || '');
+  const isEmoji = iconValue && /^\p{Emoji}/u.test(iconValue);
+  const isProbablyIconName = iconValue && /^[A-Z][a-zA-Z]+$/.test(iconValue);
+  const iconName = isProbablyIconName ? iconValue : (isEmoji ? null : 'ListChecks');
   
   return (
     <Pressable 
       style={[styles.listItem, { backgroundColor: bgColor }]}
       onPress={() => onPress(listId)}
     >
-      <View style={[styles.listIconContainer, { backgroundColor: borderColor }]}>
-        <PhosphorIcon 
-          name={list.icon || 'ClipboardText'} 
-          size={24} 
-          color={chakraColors.white} 
-        />
+      <View style={[styles.listIconContainer, { backgroundColor: iconBgColor }]}>
+        {isEmoji ? (
+          <Text style={styles.emojiIcon}>{iconValue}</Text>
+        ) : (
+          <PhosphorIcon 
+            name={iconName as string} 
+            size={16} 
+            color="#FFFFFF"
+          />
+        )}
       </View>
       <View style={styles.listInfo}>
-        <Text style={styles.listName}>{list.name}</Text>
+        <Text style={[styles.listName, { color: textColor }]}>{list.name}</Text>
       </View>
       <View style={styles.rightSection}>
-        <View style={styles.todoCountBadge}>
-          <Text style={styles.todoCountText}>{todoCount}</Text>
-        </View>
-        <Feather name="chevron-right" size={20} color={chakraColors.gray[400]} />
+        <Text style={[styles.todoCountText, { color: countTextColor }]}>{todoCount}</Text>
+        <Feather name="chevron-right" size={16} color={chevronColor} />
       </View>
     </Pressable>
   );
@@ -78,50 +72,40 @@ const styles = StyleSheet.create({
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing[4], // 16px
-    borderRadius: radii.xl, // 12px
-    marginBottom: spacing[3], // 12px
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 6,
   },
   listIconContainer: {
-    marginRight: spacing[3], // 12px
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    marginRight: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  emojiIcon: {
+    fontSize: 16,
   },
   listInfo: {
     flex: 1,
     justifyContent: 'center',
   },
   listName: {
-    fontSize: typography.fontSizes.lg, // 18px
-    fontWeight: typography.fontWeights.bold,
-    color: chakraColors.gray[800],
+    fontSize: 16,
+    fontWeight: '500',
   },
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing[2], // 8px
-  },
-  todoCountBadge: {
-    backgroundColor: chakraColors.gray[100],
-    paddingHorizontal: spacing[3], // 12px
-    paddingVertical: spacing[2], // 8px
-    borderRadius: radii.lg, // 8px
-    minWidth: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
   },
   todoCountText: {
-    fontSize: typography.fontSizes.md, // 16px
-    fontWeight: typography.fontWeights.bold,
-    color: chakraColors.gray[700],
+    fontSize: 15,
+    fontWeight: '400',
+    minWidth: 20,
+    textAlign: 'right',
   },
 });
 
