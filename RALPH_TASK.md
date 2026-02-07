@@ -131,26 +131,26 @@ Work through templates one at a time. After each commit, move to the next unchec
 
 7. [x] `AfterSchoolRoutine`
 8. [x] `Beach`
-9. [ ] `BirthdayTracker`
-10. [ ] `CarMaintenance`
-11. [ ] `ChildTemperatureTracker`
-12. [ ] `Clothes`
-13. [ ] `DateNightList`
-14. [ ] `Expiry`
-15. [ ] `GiveAwayList`
-16. [ ] `HomeMaintenanceList`
-17. [ ] `KidsPartyFoodList`
-18. [ ] `LaundryTracker`
-19. [ ] `Leftovers`
-20. [ ] `LunchPlanner`
-21. [ ] `MentalLoad`
-22. [ ] `MorningRoutine`
-23. [ ] `OffloadList`
-24. [ ] `ParkLife`
-25. [ ] `PartyBags`
-26. [ ] `PartyGuestList`
-27. [ ] `SchoolCalendarTodo`
-28. [ ] `SchoolHolidayPlanner`
-29. [ ] `SchoolPickupRoster`
-30. [ ] `SubscriptionTracker`
-31. [ ] `TidyUp`
+9. [x] `BirthdayTracker`
+10. [x] `CarMaintenance`
+11. [x] `ChildTemperatureTracker`
+12. [x] `Clothes`
+13. [x] `DateNightList`
+14. [x] `Expiry`
+15. [x] `GiveAwayList`
+16. [x] `HomeMaintenanceList`
+17. [x] `KidsPartyFoodList`
+18. [x] `LaundryTracker`
+19. [x] `Leftovers`
+20. [x] `LunchPlanner`
+21. [x] `MentalLoad`
+22. [x] `MorningRoutine`
+23. [x] `OffloadList`
+24. [x] `ParkLife`
+25. [x] `PartyBags`
+26. [x] `PartyGuestList`
+27. [x] `SchoolCalendarTodo`
+28. [x] `SchoolHolidayPlanner`
+29. [x] `SchoolPickupRoster`
+30. [x] `SubscriptionTracker`
+31. [x] `TidyUp`

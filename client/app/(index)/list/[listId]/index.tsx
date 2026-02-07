@@ -11,6 +11,31 @@ import WeeklyMealPlanner from '@/templates/WeeklyMealPlanner';
 import WeekendPlanner from '@/templates/WeekendPlanner';
 import Recipes from '@/templates/Recipes';
 import RecipeCard from '@/templates/RecipeCard';
+import AfterSchoolRoutine from '@/templates/AfterSchoolRoutine';
+import Beach from '@/templates/Beach';
+import BirthdayTracker from '@/templates/BirthdayTracker';
+import CarMaintenance from '@/templates/CarMaintenance';
+import ChildTemperatureTracker from '@/templates/ChildTemperatureTracker';
+import Clothes from '@/templates/Clothes';
+import DateNightList from '@/templates/DateNightList';
+import Expiry from '@/templates/Expiry';
+import GiveAwayList from '@/templates/GiveAwayList';
+import HomeMaintenanceList from '@/templates/HomeMaintenanceList';
+import KidsPartyFoodList from '@/templates/KidsPartyFoodList';
+import LaundryTracker from '@/templates/LaundryTracker';
+import Leftovers from '@/templates/Leftovers';
+import LunchPlanner from '@/templates/LunchPlanner';
+import MentalLoad from '@/templates/MentalLoad';
+import MorningRoutine from '@/templates/MorningRoutine';
+import OffloadList from '@/templates/OffloadList';
+import ParkLife from '@/templates/ParkLife';
+import PartyBags from '@/templates/PartyBags';
+import PartyGuestList from '@/templates/PartyGuestList';
+import SchoolCalendarTodo from '@/templates/SchoolCalendarTodo';
+import SchoolHolidayPlanner from '@/templates/SchoolHolidayPlanner';
+import SchoolPickupRoster from '@/templates/SchoolPickupRoster';
+import SubscriptionTracker from '@/templates/SubscriptionTracker';
+import TidyUp from '@/templates/TidyUp';
 import PhotoUploader from '@/components/PhotoUploader';
 import Constants from 'expo-constants';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -271,6 +296,56 @@ ${photoAnalysis ? `Context from photo: ${photoAnalysis}` : ''}`;
         return <Recipes listId={listId as string} />;
       case 'RecipeCard':
         return <RecipeCard listId={listId as string} />;
+      case 'AfterSchoolRoutine':
+        return <AfterSchoolRoutine listId={listId as string} />;
+      case 'Beach':
+        return <Beach listId={listId as string} />;
+      case 'BirthdayTracker':
+        return <BirthdayTracker listId={listId as string} />;
+      case 'CarMaintenance':
+        return <CarMaintenance listId={listId as string} />;
+      case 'ChildTemperatureTracker':
+        return <ChildTemperatureTracker listId={listId as string} />;
+      case 'Clothes':
+        return <Clothes listId={listId as string} />;
+      case 'DateNightList':
+        return <DateNightList listId={listId as string} />;
+      case 'Expiry':
+        return <Expiry listId={listId as string} />;
+      case 'GiveAwayList':
+        return <GiveAwayList listId={listId as string} />;
+      case 'HomeMaintenanceList':
+        return <HomeMaintenanceList listId={listId as string} />;
+      case 'KidsPartyFoodList':
+        return <KidsPartyFoodList listId={listId as string} />;
+      case 'LaundryTracker':
+        return <LaundryTracker listId={listId as string} />;
+      case 'Leftovers':
+        return <Leftovers listId={listId as string} />;
+      case 'LunchPlanner':
+        return <LunchPlanner listId={listId as string} />;
+      case 'MentalLoad':
+        return <MentalLoad listId={listId as string} />;
+      case 'MorningRoutine':
+        return <MorningRoutine listId={listId as string} />;
+      case 'OffloadList':
+        return <OffloadList listId={listId as string} />;
+      case 'ParkLife':
+        return <ParkLife listId={listId as string} />;
+      case 'PartyBags':
+        return <PartyBags listId={listId as string} />;
+      case 'PartyGuestList':
+        return <PartyGuestList listId={listId as string} />;
+      case 'SchoolCalendarTodo':
+        return <SchoolCalendarTodo listId={listId as string} />;
+      case 'SchoolHolidayPlanner':
+        return <SchoolHolidayPlanner listId={listId as string} />;
+      case 'SchoolPickupRoster':
+        return <SchoolPickupRoster listId={listId as string} />;
+      case 'SubscriptionTracker':
+        return <SubscriptionTracker listId={listId as string} />;
+      case 'TidyUp':
+        return <TidyUp listId={listId as string} />;
       default:
         // Fallback to default TodoList for unrecognized templates
         return <TodoList listId={listId as string} />;
