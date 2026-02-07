@@ -1,319 +1,159 @@
 import React, { useState, useCallback, useMemo, memo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  TextInput,
-  Alert,
-} from "react-native";
-import {
-  useStore,
-  useLocalRowIds,
-  useRow,
-  useDelRowCallback,
-  useAddRowCallback,
-} from "tinybase/ui-react";
-import {
-  Trash,
-  Gift,
-  CaretDown,
-  CaretUp,
-} from "phosphor-react-native";
-import {
-  format,
-  parse,
-  isValid,
-  differenceInYears,
-  setYear,
-  isFuture,
-  differenceInDays,
-  compareAsc,
-} from "date-fns";
+import { View, Text, TextInput, Pressable, ScrollView, Alert, StyleSheet } from "react-native";
+import { useStore, useLocalRowIds, useRow, useDelRowCallback, useAddRowCallback } from "tinybase/ui-react";
+import { Trash, Gift, CaretDown, CaretRight } from "phosphor-react-native";
 
 const BirthdayItem = memo(({ id }: { id: string }) => {
-  const [expanded, setExpanded] = useState(false);
-  const todoData = useRow("todos", id);
+  const itemData = useRow("todos", id);
   const store = useStore();
-  const deleteTodo = useDelRowCallback("todos", id);
-  const [newGiftIdea, setNewGiftIdea] = useState("");
+  const deleteItem = useDelRowCallback("todos", id);
+  if (!itemData) return null;
 
-  if (!todoData) return null;
+  const isDone = Boolean(itemData.done);
+  const dateStr = String(itemData.date || "");
+  const emoji = String(itemData.emoji || "🎂");
 
-  const handleDelete = () => {
-    Alert.alert("Delete", "Remove this birthday?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: deleteTodo },
-    ]);
-  };
-
-  const handleToggleDone = () => {
-    store?.setCell("todos", id, "done", !Boolean(todoData.done));
-  };
-
-  const handleBudgetChange = (text: string) => {
-    const val = parseFloat(text);
-    store?.setCell("todos", id, "amount", isNaN(val) ? 0 : val);
-  };
-
-  const handleNotesChange = (text: string) => {
-    store?.setCell("todos", id, "notes", text);
-  };
-
-  if (!todoData.date) {
-    return (
-      <View style={styles.warningCard}>
-        <View style={styles.warningRow}>
-          <Text style={styles.warningText}>
-            ⚠️ Missing birthday date for {String(todoData.text)}
-          </Text>
-          <Pressable onPress={handleDelete} style={styles.iconBtn}>
-            <Trash size={18} color="#E53E3E" />
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
-
-  const parseBirthDate = (dateString: string) => {
-    const formats = ["yyyy-MM-dd", "yyyy-MM-dd'T'HH:mm:ss.SSSX"];
-    for (const fmt of formats) {
-      try {
-        const d = parse(dateString, fmt, new Date());
-        if (isValid(d)) return d;
-      } catch {}
+  // Calculate days until birthday
+  const daysUntil = useMemo(() => {
+    if (!dateStr) return null;
+    try {
+      const parts = dateStr.split("-");
+      if (parts.length < 3) return null;
+      const birthMonth = parseInt(parts[1], 10) - 1;
+      const birthDay = parseInt(parts[2], 10);
+      const today = new Date();
+      let nextBday = new Date(today.getFullYear(), birthMonth, birthDay);
+      if (nextBday < today) {
+        nextBday = new Date(today.getFullYear() + 1, birthMonth, birthDay);
+      }
+      return Math.ceil((nextBday.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    } catch {
+      return null;
     }
-    return null;
-  };
+  }, [dateStr]);
 
-  const birthDate = parseBirthDate(String(todoData.date));
-  if (!birthDate) return null;
+  const age = useMemo(() => {
+    if (!dateStr) return null;
+    try {
+      const birth = new Date(dateStr);
+      const today = new Date();
+      let a = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) a--;
+      return a;
+    } catch {
+      return null;
+    }
+  }, [dateStr]);
 
-  const today = new Date();
-  const age = differenceInYears(today, birthDate);
-  const thisYearBirthday = setYear(birthDate, today.getFullYear());
-  const nextBirthday = isFuture(thisYearBirthday)
-    ? thisYearBirthday
-    : setYear(birthDate, today.getFullYear() + 1);
-  const daysUntil = differenceInDays(nextBirthday, today);
+  const badgeColor = daysUntil !== null && daysUntil <= 30 ? "#E53E3E" : "#38A169";
 
   return (
-    <View style={styles.itemCard}>
-      <View style={styles.itemRow}>
-        <Text style={styles.emoji}>{String(todoData.emoji || "🎂")}</Text>
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemName}>
-            {String(todoData.text)}'s {age + 1}th Birthday
-          </Text>
-          <Text style={styles.itemDate}>
-            {format(birthDate, "MMMM d, yyyy")}
-          </Text>
+    <View style={[styles.item, { opacity: isDone ? 0.55 : 1 }]}>
+      <Pressable onPress={() => store?.setCell("todos", id, "done", !isDone)} style={styles.checkbox}>
+        <View style={[styles.checkboxBox, isDone && { backgroundColor: "#ED8936", borderColor: "#ED8936" }]}>
+          {isDone ? <Text style={styles.checkmark}>✓</Text> : null}
         </View>
-        <View
-          style={[
-            styles.daysBadge,
-            daysUntil <= 30 ? styles.daysBadgeUrgent : styles.daysBadgeNormal,
-          ]}
-        >
-          <Text
-            style={[
-              styles.daysBadgeText,
-              daysUntil <= 30 ? styles.daysBadgeTextUrgent : styles.daysBadgeTextNormal,
-            ]}
-          >
-            {daysUntil} days
-          </Text>
-        </View>
-        <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
-          {expanded ? (
-            <CaretUp size={18} color="#718096" />
-          ) : (
-            <CaretDown size={18} color="#718096" />
-          )}
-        </Pressable>
-        <Pressable onPress={handleDelete} style={styles.iconBtn}>
-          <Trash size={18} color="#E53E3E" />
-        </Pressable>
+      </Pressable>
+      <Text style={styles.emoji}>{emoji}</Text>
+      <View style={styles.itemContent}>
+        <Text style={[styles.itemText, isDone && styles.strikethrough]}>
+          {String(itemData.text || "")}{age !== null ? `'s ${age + 1}th Birthday` : ""}
+        </Text>
+        {dateStr ? <Text style={styles.itemDate}>{dateStr}</Text> : null}
+        {itemData.notes ? <Text style={styles.itemNotes} numberOfLines={1}>{String(itemData.notes)}</Text> : null}
       </View>
-
-      {expanded && (
-        <View style={styles.detailsSection}>
-          <View style={styles.detailRow}>
-            <Gift size={18} color="#805AD5" />
-            <Text style={styles.detailLabel}>Gift Ideas / Notes:</Text>
-          </View>
-          <TextInput
-            style={styles.notesInput}
-            value={String(todoData.notes || "")}
-            onChangeText={handleNotesChange}
-            placeholder="Add gift ideas, notes..."
-            placeholderTextColor="#A0AEC0"
-            multiline
-          />
-
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Budget: $</Text>
-            <TextInput
-              style={styles.budgetInput}
-              value={String(Number(todoData.amount || 0).toFixed(2))}
-              onChangeText={handleBudgetChange}
-              keyboardType="decimal-pad"
-            />
-          </View>
-
-          <Pressable onPress={handleToggleDone} style={styles.purchasedRow}>
-            <View
-              style={[
-                styles.checkboxInner,
-                Boolean(todoData.done) && styles.checkboxChecked,
-              ]}
-            >
-              {Boolean(todoData.done) && (
-                <Text style={styles.checkmark}>✓</Text>
-              )}
-            </View>
-            <Text style={styles.purchasedText}>Gift Purchased</Text>
-          </Pressable>
+      {daysUntil !== null && (
+        <View style={[styles.badge, { backgroundColor: badgeColor + "20" }]}>
+          <Text style={[styles.badgeText, { color: badgeColor }]}>{daysUntil}d</Text>
         </View>
       )}
+      <Pressable onPress={() => Alert.alert("Delete", "Remove this birthday?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: deleteItem }])} style={styles.deleteBtn}>
+        <Trash size={16} color="#E53E3E" weight="bold" />
+      </Pressable>
     </View>
   );
 });
-BirthdayItem.displayName = "BirthdayItem";
 
 export default function BirthdayTracker({ listId }: { listId: string }) {
   const [newName, setNewName] = useState("");
-  const [newBirthDate, setNewBirthDate] = useState("");
+  const [newDate, setNewDate] = useState("");
   const store = useStore();
+  const todoIds = useLocalRowIds("todoList", listId) || [];
   const listData = useRow("lists", listId);
-  const birthdayIds = useLocalRowIds("todoList", listId) || [];
 
-  const { incompleteBirthdayIds, sortedBirthdayIds } = useMemo(() => {
-    const incomplete: string[] = [];
-    const complete: string[] = [];
-
-    birthdayIds.forEach((id) => {
-      const todo = store?.getRow("todos", id);
-      if (todo && todo.date) {
-        complete.push(id);
-      } else {
-        incomplete.push(id);
-      }
-    });
-
-    const sorted = complete.sort((a, b) => {
-      const dateA = parse(
-        String(store?.getCell("todos", a, "date")),
-        "yyyy-MM-dd",
-        new Date()
-      );
-      const dateB = parse(
-        String(store?.getCell("todos", b, "date")),
-        "yyyy-MM-dd",
-        new Date()
-      );
+  const sortedIds = useMemo(() => {
+    return [...todoIds].sort((a, b) => {
+      const dateA = String(store?.getCell("todos", a, "date") || "");
+      const dateB = String(store?.getCell("todos", b, "date") || "");
+      if (!dateA) return 1;
+      if (!dateB) return -1;
       const today = new Date();
-      const nextA = isFuture(setYear(dateA, today.getFullYear()))
-        ? setYear(dateA, today.getFullYear())
-        : setYear(dateA, today.getFullYear() + 1);
-      const nextB = isFuture(setYear(dateB, today.getFullYear()))
-        ? setYear(dateB, today.getFullYear())
-        : setYear(dateB, today.getFullYear() + 1);
-      return compareAsc(nextA, nextB);
+      const getNext = (d: string) => {
+        try {
+          const parts = d.split("-");
+          const m = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          let next = new Date(today.getFullYear(), m, day);
+          if (next < today) next = new Date(today.getFullYear() + 1, m, day);
+          return next.getTime();
+        } catch {
+          return Infinity;
+        }
+      };
+      return getNext(dateA) - getNext(dateB);
     });
-
-    return { incompleteBirthdayIds: incomplete, sortedBirthdayIds: sorted };
-  }, [birthdayIds, store]);
+  }, [todoIds, store]);
 
   const addBirthday = useAddRowCallback(
     "todos",
-    (params: any) => ({
-      list: listId,
-      text: params.name,
-      date: params.birthDate,
-      emoji: "🎂",
-      notes: "",
-      amount: 0,
-      done: false,
-    }),
-    [listId],
-    undefined,
-    (rowId) => {
-      if (rowId) {
-        setNewName("");
-        setNewBirthDate("");
-      }
-    }
+    (data: any) => ({ text: data.text?.trim() || "", date: data.date || "", emoji: "🎂", notes: "", amount: 0, done: false, list: listId }),
+    [listId]
   );
 
   const handleAdd = useCallback(() => {
-    if (newName.trim() && newBirthDate) {
-      addBirthday({ name: newName, birthDate: newBirthDate });
+    if (newName.trim() && newDate.trim()) {
+      addBirthday({ text: newName.trim(), date: newDate.trim() });
+      setNewName("");
+      setNewDate("");
     }
-  }, [addBirthday, newName, newBirthDate]);
-
-  const progressLabel = useMemo(() => {
-    if (birthdayIds.length === 0) return "Add your first birthday! 🎂";
-    if (birthdayIds.length < 5) return "A few dates to remember 📅";
-    return "Birthday calendar pro! 🎁";
-  }, [birthdayIds.length]);
+  }, [newName, newDate, addBirthday]);
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.listTitle}>
-              {String(listData?.name || "Birthday Tracker")}
-            </Text>
-            <Text style={styles.progressLabel}>{progressLabel}</Text>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Gift size={32} color="#C05621" weight="fill" />
+            <View>
+              <Text style={styles.title}>{String(listData?.name || "Birthday Tracker")}</Text>
+              <Text style={styles.subtitle}>
+                {todoIds.length === 0 ? "Add your first birthday! 🎂" : `${todoIds.length} birthdays tracked`}
+              </Text>
+            </View>
           </View>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>
-              {sortedBirthdayIds.length} Birthdays
-            </Text>
+          <View style={[styles.countBadge, { backgroundColor: "#ED893630" }]}>
+            <Text style={{ color: "#C05621", fontWeight: "600", fontSize: 13 }}>{todoIds.length}</Text>
           </View>
         </View>
 
-        {/* Add Form */}
-        <View style={styles.addRow}>
-          <TextInput
-            style={[styles.addInput, { flex: 1 }]}
-            value={newName}
-            onChangeText={setNewName}
-            placeholder="Name"
-            placeholderTextColor="#A0AEC0"
-          />
-          <TextInput
-            style={[styles.addInput, { flex: 1 }]}
-            value={newBirthDate}
-            onChangeText={setNewBirthDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor="#A0AEC0"
-          />
-          <Pressable onPress={handleAdd} style={styles.addButton}>
-            <Text style={styles.addButtonText}>Add</Text>
+        <View style={styles.addSection}>
+          <TextInput style={styles.addInput} placeholder="Name" value={newName} onChangeText={setNewName} placeholderTextColor="#A0AEC0" returnKeyType="next" />
+          <TextInput style={styles.addInput} placeholder="Date (YYYY-MM-DD)" value={newDate} onChangeText={setNewDate} placeholderTextColor="#A0AEC0" returnKeyType="done" onSubmitEditing={handleAdd} />
+          <Pressable onPress={handleAdd} style={styles.addBtn}>
+            <Text style={styles.addBtnText}>Add Birthday</Text>
           </Pressable>
         </View>
 
-        {/* Items */}
-        {incompleteBirthdayIds.map((id) => (
-          <BirthdayItem key={id} id={id} />
-        ))}
-        {sortedBirthdayIds.map((id) => (
+        {sortedIds.map((id) => (
           <BirthdayItem key={id} id={id} />
         ))}
 
-        {/* Empty State */}
-        {birthdayIds.length === 0 && (
+        {todoIds.length === 0 && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>🎂</Text>
             <Text style={styles.emptyTitle}>No birthdays tracked yet!</Text>
-            <Text style={styles.emptySubtitle}>
-              Add someone special and never miss a birthday again
-            </Text>
+            <Text style={styles.emptySubtitle}>Add someone special and never miss a birthday again</Text>
           </View>
         )}
       </View>
@@ -324,126 +164,30 @@ export default function BirthdayTracker({ listId }: { listId: string }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FEEBC8" },
   content: { padding: 16 },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
-  },
-  listTitle: { fontSize: 24, fontWeight: "bold", color: "#744210" },
-  progressLabel: { fontSize: 12, color: "#975A16", fontStyle: "italic", marginTop: 2 },
-  countBadge: {
-    backgroundColor: "#BEE3F8",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  countBadgeText: { fontSize: 14, fontWeight: "600", color: "#2B6CB0" },
-  addRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  addInput: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: "#2D3748",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  addButton: {
-    backgroundColor: "#3182CE",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    justifyContent: "center",
-  },
-  addButtonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 15 },
-  warningCard: {
-    backgroundColor: "#FEFCBF",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  warningRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  warningText: { color: "#975A16", fontSize: 14, flex: 1 },
-  itemCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    marginBottom: 8,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  itemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
-    gap: 8,
-  },
-  emoji: { fontSize: 24 },
-  itemInfo: { flex: 1 },
-  itemName: { fontSize: 15, fontWeight: "bold", color: "#2D3748" },
-  itemDate: { fontSize: 12, color: "#718096", marginTop: 2 },
-  daysBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 16 },
-  daysBadgeUrgent: { backgroundColor: "#FED7D7" },
-  daysBadgeNormal: { backgroundColor: "#C6F6D5" },
-  daysBadgeText: { fontSize: 12, fontWeight: "600" },
-  daysBadgeTextUrgent: { color: "#C53030" },
-  daysBadgeTextNormal: { color: "#276749" },
-  iconBtn: { padding: 6 },
-  detailsSection: { backgroundColor: "#F7FAFC", padding: 12, gap: 10 },
-  detailRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  detailLabel: { fontSize: 14, fontWeight: "500", color: "#4A5568" },
-  notesInput: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: "#2D3748",
-    minHeight: 50,
-    textAlignVertical: "top",
-  },
-  budgetInput: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 14,
-    color: "#2D3748",
-    width: 100,
-  },
-  purchasedRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
-  checkboxInner: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: "#CBD5E0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkboxChecked: { backgroundColor: "#3182CE", borderColor: "#3182CE" },
-  checkmark: { color: "#FFFFFF", fontSize: 14, fontWeight: "bold" },
-  purchasedText: { fontSize: 14, color: "#4A5568" },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  title: { fontSize: 24, fontWeight: "bold", color: "#C05621" },
+  subtitle: { fontSize: 12, color: "#DD6B20", fontStyle: "italic" },
+  countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  addSection: { backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 16, gap: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  addInput: { borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: "#2D3748" },
+  addBtn: { backgroundColor: "#ED8936", borderRadius: 8, paddingVertical: 12, alignItems: "center" },
+  addBtnText: { color: "#FFF", fontWeight: "bold", fontSize: 14 },
+  item: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF", borderRadius: 8, padding: 10, marginBottom: 6, gap: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 1, elevation: 1 },
+  checkbox: {},
+  checkboxBox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: "#CBD5E0", alignItems: "center", justifyContent: "center" },
+  checkmark: { color: "#FFF", fontSize: 14, fontWeight: "bold" },
+  emoji: { fontSize: 18 },
+  itemContent: { flex: 1 },
+  itemText: { fontSize: 14, fontWeight: "500", color: "#2D3748" },
+  strikethrough: { textDecorationLine: "line-through", color: "#A0AEC0" },
+  itemDate: { fontSize: 11, color: "#718096", marginTop: 2 },
+  itemNotes: { fontSize: 11, color: "#718096", marginTop: 2, fontStyle: "italic" },
+  badge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  badgeText: { fontSize: 11, fontWeight: "600" },
+  deleteBtn: { padding: 4 },
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
   emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#744210" },
-  emptySubtitle: {
-    fontSize: 14,
-    color: "#975A16",
-    textAlign: "center",
-    maxWidth: 280,
-  },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#C05621" },
+  emptySubtitle: { fontSize: 14, color: "#DD6B20", textAlign: "center", maxWidth: 280 },
 });

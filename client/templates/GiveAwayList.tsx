@@ -1,64 +1,218 @@
 import React, { useState, useCallback, useMemo, memo } from "react";
-import { View, Text, TextInput, Pressable, ScrollView, Alert, StyleSheet } from "react-native";
-import { useStore, useLocalRowIds, useRow, useDelRowCallback, useAddRowCallback } from "tinybase/ui-react";
-import { Trash, Plus, Gift, CaretDown, CaretRight } from "phosphor-react-native";
-
-const CATEGORIES = [
-  { name: "Donate", emoji: "🏪", color: "#38A169" },
-  { name: "Sell", emoji: "💰", color: "#DD6B20" },
-  { name: "Gift", emoji: "🎁", color: "#805AD5" },
-  { name: "Recycle", emoji: "♻️", color: "#319795" },
-  { name: "Other", emoji: "📦", color: "#718096" },
-];
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  TextInput,
+  Alert,
+} from "react-native";
+import {
+  useLocalRowIds,
+  useRow,
+  useDelRowCallback,
+  useAddRowCallback,
+  useStore,
+} from "tinybase/ui-react";
+import { Trash, CaretDown, CaretUp, Gift } from "phosphor-react-native";
 
 const GiveAwayItem = memo(({ id }: { id: string }) => {
-  const itemData = useRow("todos", id);
+  const [expanded, setExpanded] = useState(false);
+  const todoData = useRow("todos", id);
   const store = useStore();
-  const deleteItem = useDelRowCallback("todos", id);
-  if (!itemData) return null;
-  const isDone = Boolean(itemData.done);
+  const deleteTodo = useDelRowCallback("todos", id);
+
+  if (!todoData) return null;
+
+  const isDone = Boolean(todoData.done);
+
+  const handleToggle = () => store?.setCell("todos", id, "done", !isDone);
+  const handleDelete = () => {
+    Alert.alert("Delete", "Remove this item?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: deleteTodo },
+    ]);
+  };
+
   return (
-    <View style={[styles.item, { opacity: isDone ? 0.6 : 1 }]}>
-      <Pressable onPress={() => store?.setCell("todos", id, "done", !isDone)}><View style={[styles.cbox, isDone && styles.cboxDone]}>{isDone ? <Text style={styles.chk}>✓</Text> : null}</View></Pressable>
-      <View style={styles.itemContent}><Text style={[styles.itemText, isDone && styles.strike]}>{String(itemData.text || "")}</Text>{itemData.notes ? <Text style={styles.notes} numberOfLines={1}>{String(itemData.notes)}</Text> : null}</View>
-      <Pressable onPress={() => Alert.alert("Delete", "Remove?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: deleteItem }])}><Trash size={16} color="#E53E3E" /></Pressable>
+    <View style={[styles.itemCard, isDone && styles.itemDone]}>
+      <View style={styles.itemRow}>
+        <Pressable onPress={handleToggle} style={styles.checkbox}>
+          <View style={[styles.checkboxInner, isDone && styles.checkboxChecked]}>
+            {isDone && <Text style={styles.checkmark}>✓</Text>}
+          </View>
+        </Pressable>
+        <Text style={[styles.itemText, isDone && styles.itemTextDone]} numberOfLines={1}>
+          {String(todoData.text || "")}
+        </Text>
+        <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
+          {expanded ? <CaretUp size={18} color="#319795" /> : <CaretDown size={18} color="#319795" />}
+        </Pressable>
+        <Pressable onPress={handleDelete} style={styles.iconBtn}>
+          <Trash size={18} color="#E53E3E" />
+        </Pressable>
+      </View>
+
+      {expanded && (
+        <View style={styles.detailsSection}>
+          <Text style={styles.detailLabel}>Description / Notes:</Text>
+          <TextInput
+            style={styles.detailInput}
+            value={String(todoData.notes || "")}
+            onChangeText={(text) => store?.setCell("todos", id, "notes", text)}
+            placeholder="Item description"
+            placeholderTextColor="#A0AEC0"
+            multiline
+          />
+          <Text style={styles.detailLabel}>Recipient's email:</Text>
+          <TextInput
+            style={styles.detailInput}
+            value={String(todoData.email || "")}
+            onChangeText={(text) => store?.setCell("todos", id, "email", text)}
+            placeholder="Recipient's email"
+            placeholderTextColor="#A0AEC0"
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        </View>
+      )}
     </View>
   );
 });
+GiveAwayItem.displayName = "GiveAwayItem";
 
 export default function GiveAwayList({ listId }: { listId: string }) {
   const [newItem, setNewItem] = useState("");
-  const [selectedCat, setSelectedCat] = useState(CATEGORIES[0].name);
-  const [openCats, setOpenCats] = useState<Record<string, boolean>>(CATEGORIES.reduce((a, c) => ({ ...a, [c.name]: true }), {}));
   const store = useStore();
-  const todoIds = useLocalRowIds("todoList", listId) || [];
   const listData = useRow("lists", listId);
-  const categorized = useMemo(() => { const g: Record<string, string[]> = {}; todoIds.forEach((id) => { const c = String(store?.getCell("todos", id, "category") || "Donate"); if (!g[c]) g[c] = []; g[c].push(id); }); return g; }, [todoIds, store]);
-  const addItem = useAddRowCallback("todos", (text: string) => ({ text: text.trim(), category: selectedCat, done: false, list: listId, notes: "" }), [listId, selectedCat]);
-  const handleAdd = useCallback(() => { if (newItem.trim()) { addItem(newItem); setNewItem(""); } }, [addItem, newItem]);
+  const itemIds = useLocalRowIds("todoList", listId) || [];
+
+  const addItem = useAddRowCallback(
+    "todos",
+    (text: string) => ({
+      text: text.trim(),
+      list: listId,
+      done: false,
+      type: "A",
+      notes: "",
+      email: "",
+    }),
+    [listId],
+    undefined,
+    (rowId) => { if (rowId) setNewItem(""); }
+  );
+
+  const handleAdd = useCallback(() => {
+    if (newItem.trim()) addItem(newItem);
+  }, [addItem, newItem]);
+
+  const { availableItems, assignedItems } = useMemo(() => {
+    const available: string[] = [];
+    const assigned: string[] = [];
+    itemIds.forEach((id) => {
+      const email = store?.getCell("todos", id, "email");
+      if (email) assigned.push(id);
+      else available.push(id);
+    });
+    return { availableItems: available, assignedItems: assigned };
+  }, [itemIds, store]);
+
+  const progressLabel = useMemo(() => {
+    if (itemIds.length === 0) return "Ready to declutter? 📦";
+    if (itemIds.length <= 3) return "Sorting things out 🧹";
+    return "Declutter champion! ✨";
+  }, [itemIds.length]);
 
   return (
-    <ScrollView style={styles.container}><View style={styles.content}>
-      <View style={styles.header}><Gift size={32} color="#38A169" weight="fill" /><Text style={styles.title}>{String(listData?.name || "Give Away")}</Text></View>
-      <View style={styles.addSection}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}><View style={styles.catRow}>{CATEGORIES.map(({ name, emoji }) => (<Pressable key={name} onPress={() => setSelectedCat(name)} style={[styles.catChip, selectedCat === name && styles.catChipSel]}><Text style={[styles.catChipText, selectedCat === name && styles.catChipTextSel]}>{emoji} {name}</Text></Pressable>))}</View></ScrollView>
-        <View style={styles.addRow}><TextInput style={styles.addInput} placeholder="Add item..." value={newItem} onChangeText={setNewItem} onSubmitEditing={handleAdd} placeholderTextColor="#A0AEC0" returnKeyType="done" /><Pressable onPress={handleAdd} style={styles.addBtn}><Plus size={18} color="#FFF" weight="bold" /></Pressable></View>
+    <ScrollView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <Gift size={28} color="#319795" weight="fill" />
+            <View>
+              <Text style={styles.listTitle}>{String(listData?.name || "Give Away List")}</Text>
+              <Text style={styles.progressLabel}>{progressLabel}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.addRow}>
+          <TextInput style={styles.addInput} value={newItem} onChangeText={setNewItem}
+            placeholder="Add a new item" placeholderTextColor="#A0AEC0"
+            onSubmitEditing={handleAdd} returnKeyType="done" />
+          <Pressable onPress={handleAdd} style={styles.addButton}>
+            <Text style={styles.addButtonText}>Add</Text>
+          </Pressable>
+        </View>
+
+        {availableItems.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Available Items</Text>
+              <View style={styles.sectionBadge}>
+                <Text style={styles.sectionBadgeText}>{availableItems.length}</Text>
+              </View>
+            </View>
+            {availableItems.map((id) => <GiveAwayItem key={id} id={id} />)}
+          </View>
+        )}
+
+        {assignedItems.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Assigned Items</Text>
+              <View style={[styles.sectionBadge, { backgroundColor: "#BEE3F8" }]}>
+                <Text style={[styles.sectionBadgeText, { color: "#2B6CB0" }]}>{assignedItems.length}</Text>
+              </View>
+            </View>
+            {assignedItems.map((id) => <GiveAwayItem key={id} id={id} />)}
+          </View>
+        )}
+
+        {itemIds.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>📦</Text>
+            <Text style={styles.emptyTitle}>Nothing to rehome yet</Text>
+            <Text style={styles.emptySubtitle}>Add items you'd like to give away, sell, or donate</Text>
+          </View>
+        )}
       </View>
-      {CATEGORIES.map((cat) => { const items = categorized[cat.name] || []; if (!items.length) return null; const isOpen = openCats[cat.name] !== false; return (<View key={cat.name} style={styles.section}><Pressable onPress={() => setOpenCats((p) => ({ ...p, [cat.name]: !isOpen }))} style={[styles.secH, { backgroundColor: cat.color + "15" }]}><Text style={[styles.secN, { color: cat.color }]}>{cat.emoji} {cat.name}</Text><View style={styles.secM}><Text style={[styles.secC, { color: cat.color }]}>{items.length}</Text>{isOpen ? <CaretDown size={14} color={cat.color} /> : <CaretRight size={14} color={cat.color} />}</View></Pressable>{isOpen && <View style={styles.secI}>{items.map((id) => <GiveAwayItem key={id} id={id} />)}</View>}</View>); })}
-      {todoIds.length === 0 && <View style={styles.empty}><Text style={styles.emptyE}>🎁</Text><Text style={styles.emptyT}>Nothing to give away yet</Text></View>}
-    </View></ScrollView>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F0FFF4" }, content: { padding: 16 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 }, title: { fontSize: 24, fontWeight: "bold", color: "#22543D" },
-  addSection: { backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 16, gap: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  catRow: { flexDirection: "row", gap: 6 }, catChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: "#EDF2F7", borderWidth: 1, borderColor: "#E2E8F0" }, catChipSel: { backgroundColor: "#C6F6D5", borderColor: "#38A169" }, catChipText: { fontSize: 12, color: "#4A5568" }, catChipTextSel: { color: "#22543D", fontWeight: "600" },
-  addRow: { flexDirection: "row", gap: 8 }, addInput: { flex: 1, borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: "#2D3748" }, addBtn: { backgroundColor: "#38A169", width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  section: { marginBottom: 8 }, secH: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 10, borderRadius: 8 }, secN: { fontSize: 14, fontWeight: "bold" }, secM: { flexDirection: "row", alignItems: "center", gap: 6 }, secC: { fontSize: 12, fontWeight: "600" }, secI: { gap: 4, marginTop: 4 },
-  item: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF", borderRadius: 8, padding: 10, gap: 8 },
-  cbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: "#38A169", alignItems: "center", justifyContent: "center" }, cboxDone: { backgroundColor: "#38A169" }, chk: { color: "#FFF", fontSize: 14, fontWeight: "bold" },
-  itemContent: { flex: 1 }, itemText: { fontSize: 14, fontWeight: "500", color: "#2D3748" }, strike: { textDecorationLine: "line-through", color: "#A0AEC0" }, notes: { fontSize: 11, color: "#718096", marginTop: 2 },
-  empty: { alignItems: "center", paddingVertical: 40, gap: 8 }, emptyE: { fontSize: 48 }, emptyT: { fontSize: 18, fontWeight: "600", color: "#22543D" },
+  container: { flex: 1, backgroundColor: "#E6FFFA" },
+  content: { padding: 16 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  listTitle: { fontSize: 22, fontWeight: "bold", color: "#234E52" },
+  progressLabel: { fontSize: 12, color: "#319795", fontStyle: "italic", marginTop: 2 },
+  addRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  addInput: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: "#2D3748", borderWidth: 1, borderColor: "#B2F5EA" },
+  addButton: { backgroundColor: "#319795", borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10 },
+  addButtonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 15 },
+  section: { marginBottom: 16 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  sectionTitle: { fontSize: 16, fontWeight: "bold", color: "#234E52" },
+  sectionBadge: { backgroundColor: "#C6F6D5", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
+  sectionBadgeText: { fontSize: 12, fontWeight: "600", color: "#276749" },
+  itemCard: { backgroundColor: "#FFFFFF", borderRadius: 8, marginBottom: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  itemDone: { opacity: 0.6 },
+  itemRow: { flexDirection: "row", alignItems: "center", padding: 10, gap: 8 },
+  checkbox: { padding: 4 },
+  checkboxInner: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: "#CBD5E0", alignItems: "center", justifyContent: "center" },
+  checkboxChecked: { backgroundColor: "#38A169", borderColor: "#38A169" },
+  checkmark: { color: "#FFFFFF", fontSize: 14, fontWeight: "bold" },
+  itemText: { flex: 1, fontSize: 15, fontWeight: "600", color: "#2D3748" },
+  itemTextDone: { textDecorationLine: "line-through", color: "#A0AEC0" },
+  iconBtn: { padding: 6 },
+  detailsSection: { backgroundColor: "#F7FAFC", padding: 12, gap: 8 },
+  detailLabel: { fontSize: 13, fontWeight: "500", color: "#4A5568" },
+  detailInput: { backgroundColor: "#FFFFFF", borderRadius: 6, borderWidth: 1, borderColor: "#E2E8F0", paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: "#2D3748" },
+  emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
+  emptyEmoji: { fontSize: 48 },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#234E52" },
+  emptySubtitle: { fontSize: 14, color: "#319795", textAlign: "center", maxWidth: 280 },
 });
