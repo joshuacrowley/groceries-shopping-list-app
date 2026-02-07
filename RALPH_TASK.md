@@ -120,12 +120,12 @@ Work through templates one at a time. After each commit, move to the next unchec
 
 ### Refresh existing (overwrite with fresh port from web source)
 
-1. [ ] `ShoppingListv2`
-2. [ ] `Today`
-3. [ ] `WeeklyMealPlanner`
-4. [ ] `WeekendPlanner`
-5. [ ] `Recipes`
-6. [ ] `RecipeCard`
+1. [x] `ShoppingListv2`
+2. [x] `Today`
+3. [x] `WeeklyMealPlanner`
+4. [x] `WeekendPlanner`
+5. [x] `Recipes`
+6. [x] `RecipeCard`
 
 ### Port new templates
 

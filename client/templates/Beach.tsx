@@ -1,0 +1,153 @@
+import React, { useState, useCallback, useMemo, memo } from "react";
+import { View, Text, TextInput, Pressable, ScrollView, Alert, StyleSheet } from "react-native";
+import { useStore, useLocalRowIds, useRow, useDelRowCallback, useAddRowCallback } from "tinybase/ui-react";
+import { Trash, Plus, Waves, CaretDown, CaretRight } from "phosphor-react-native";
+
+const CATEGORIES = [
+  { name: "Beach Bag", emoji: "🎒", color: "#DD6B20" },
+  { name: "Sun & Safety", emoji: "☀️", color: "#ECC94B" },
+  { name: "Snacks & Drinks", emoji: "🧊", color: "#319795" },
+  { name: "Water Fun", emoji: "🏄", color: "#0BC5EA" },
+  { name: "Entertainment", emoji: "🎶", color: "#805AD5" },
+];
+
+const BeachItem = memo(({ id }: { id: string }) => {
+  const itemData = useRow("todos", id);
+  const store = useStore();
+  const deleteItem = useDelRowCallback("todos", id);
+  if (!itemData) return null;
+  const isDone = Boolean(itemData.done);
+  const cat = CATEGORIES.find((c) => c.name === String(itemData.category)) || CATEGORIES[0];
+
+  return (
+    <View style={[styles.item, { borderLeftColor: isDone ? "#CBD5E0" : cat.color, opacity: isDone ? 0.55 : 1 }]}>
+      <Pressable onPress={() => store?.setCell("todos", id, "done", !isDone)} style={styles.checkbox}>
+        <View style={[styles.checkboxBox, isDone && { backgroundColor: cat.color, borderColor: cat.color }]}>
+          {isDone ? <Text style={styles.checkmark}>✓</Text> : null}
+        </View>
+      </Pressable>
+      <Text style={styles.emoji}>{String(itemData.emoji || cat.emoji)}</Text>
+      <View style={styles.itemContent}>
+        <Text style={[styles.itemText, isDone && styles.strikethrough]}>{String(itemData.text || "")}</Text>
+        {itemData.notes ? <Text style={styles.itemNotes} numberOfLines={1}>{String(itemData.notes)}</Text> : null}
+      </View>
+      <Pressable onPress={() => Alert.alert("Delete", "Remove?", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: deleteItem }])} style={styles.deleteBtn}>
+        <Trash size={16} color="#E53E3E" weight="bold" />
+      </Pressable>
+    </View>
+  );
+});
+
+export default function Beach({ listId }: { listId: string }) {
+  const [newTodo, setNewTodo] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].name);
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(CATEGORIES.reduce((acc, c) => ({ ...acc, [c.name]: true }), {}));
+  const store = useStore();
+  const todoIds = useLocalRowIds("todoList", listId) || [];
+  const listData = useRow("lists", listId);
+
+  const categorizedItems = useMemo(() => {
+    const grouped: Record<string, string[]> = {};
+    todoIds.forEach((id) => { const cat = String(store?.getCell("todos", id, "category") || "Beach Bag"); if (!grouped[cat]) grouped[cat] = []; grouped[cat].push(id); });
+    return grouped;
+  }, [todoIds, store]);
+
+  const addItem = useAddRowCallback("todos", (data: any) => ({ text: data.text?.trim() || "", category: data.category || selectedCategory, emoji: data.emoji || "🏖️", notes: "", done: false, list: listId }), [listId, selectedCategory]);
+
+  const handleAdd = useCallback(() => { if (newTodo.trim()) { addItem({ text: newTodo.trim(), category: selectedCategory }); setNewTodo(""); } }, [newTodo, selectedCategory, addItem]);
+
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Waves size={32} color="#2B6CB0" weight="fill" />
+            <View>
+              <Text style={styles.title}>{String(listData?.name || "Beach Day")}</Text>
+              <Text style={styles.subtitle}>{todoIds.length === 0 ? "Add items to get beach-ready!" : "Pack it up!"}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.addSection}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.catRow}>{CATEGORIES.map(({ name, emoji }) => (
+              <Pressable key={name} onPress={() => setSelectedCategory(name)} style={[styles.catChip, selectedCategory === name && styles.catChipSelected]}>
+                <Text style={[styles.catChipText, selectedCategory === name && styles.catChipTextSelected]}>{emoji} {name}</Text>
+              </Pressable>
+            ))}</View>
+          </ScrollView>
+          <View style={styles.addRow}>
+            <TextInput style={styles.addInput} placeholder="Add to your beach bag..." value={newTodo} onChangeText={setNewTodo} onSubmitEditing={handleAdd} placeholderTextColor="#A0AEC0" returnKeyType="done" />
+            <Pressable onPress={handleAdd} style={styles.addBtn}><Plus size={18} color="#FFF" weight="bold" /></Pressable>
+          </View>
+        </View>
+
+        {CATEGORIES.map((cat) => {
+          const items = categorizedItems[cat.name] || [];
+          if (items.length === 0) return null;
+          const isOpen = openCategories[cat.name] !== false;
+          return (
+            <View key={cat.name} style={styles.catSection}>
+              <Pressable onPress={() => setOpenCategories((p) => ({ ...p, [cat.name]: !isOpen }))} style={[styles.catHeader, { backgroundColor: cat.color + "20" }]}>
+                <Text style={[styles.catName, { color: cat.color }]}>{cat.emoji} {cat.name}</Text>
+                <View style={styles.catMeta}>
+                  <View style={[styles.countBadge, { backgroundColor: cat.color + "30" }]}><Text style={[styles.countText, { color: cat.color }]}>{items.length}</Text></View>
+                  {isOpen ? <CaretDown size={14} color={cat.color} /> : <CaretRight size={14} color={cat.color} />}
+                </View>
+              </Pressable>
+              {isOpen && <View style={styles.catItems}>{items.map((id) => <BeachItem key={id} id={id} />)}</View>}
+            </View>
+          );
+        })}
+
+        {todoIds.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🏖️</Text>
+            <Text style={styles.emptyTitle}>Time to hit the beach!</Text>
+            <Text style={styles.emptySubtitle}>Add items to start packing</Text>
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#E0F7FA" },
+  content: { padding: 16 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  title: { fontSize: 24, fontWeight: "bold", color: "#2B6CB0" },
+  subtitle: { fontSize: 12, color: "#4299E1", fontStyle: "italic" },
+  addSection: { backgroundColor: "#FFF", borderRadius: 12, padding: 12, marginBottom: 16, gap: 10, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  catRow: { flexDirection: "row", gap: 6 },
+  catChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: "#EDF2F7", borderWidth: 1, borderColor: "#E2E8F0" },
+  catChipSelected: { backgroundColor: "#BEE3F8", borderColor: "#4299E1" },
+  catChipText: { fontSize: 12, color: "#4A5568" },
+  catChipTextSelected: { color: "#2B6CB0", fontWeight: "600" },
+  addRow: { flexDirection: "row", gap: 8 },
+  addInput: { flex: 1, borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: "#2D3748" },
+  addBtn: { backgroundColor: "#4299E1", width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  catSection: { marginBottom: 8 },
+  catHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 10, borderRadius: 8 },
+  catName: { fontSize: 14, fontWeight: "bold" },
+  catMeta: { flexDirection: "row", alignItems: "center", gap: 6 },
+  countBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  countText: { fontSize: 11, fontWeight: "600" },
+  catItems: { gap: 4, marginTop: 4 },
+  item: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFF", borderRadius: 8, padding: 10, borderLeftWidth: 4, gap: 8 },
+  checkbox: {},
+  checkboxBox: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: "#CBD5E0", alignItems: "center", justifyContent: "center" },
+  checkmark: { color: "#FFF", fontSize: 14, fontWeight: "bold" },
+  emoji: { fontSize: 18 },
+  itemContent: { flex: 1 },
+  itemText: { fontSize: 14, fontWeight: "500", color: "#2D3748" },
+  strikethrough: { textDecorationLine: "line-through", color: "#A0AEC0" },
+  itemNotes: { fontSize: 11, color: "#718096", marginTop: 2, fontStyle: "italic" },
+  deleteBtn: { padding: 4 },
+  emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
+  emptyEmoji: { fontSize: 48 },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#2B6CB0" },
+  emptySubtitle: { fontSize: 14, color: "#4299E1", textAlign: "center" },
+});
