@@ -292,38 +292,25 @@ interface BatchCookingListProps {
 const BatchCookingList: React.FC<BatchCookingListProps> = ({ listId }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  const todosTable = useTable("todos");
+  const store = useStore();
   const todoIds = useLocalRowIds("todoList", listId) || [];
   const listData = useRow("lists", listId);
 
   const { groupedTasks, totalTasks } = useMemo(() => {
-    const grouped = todoIds.reduce((acc, id) => {
-      const task = todosTable?.[id];
-      if (task) {
-        const category = task.category || STAGES[0].name;
-        if (!acc[category]) {
-          acc[category] = [];
-        }
-        acc[category].push(id);
+    const grouped: Record<string, string[]> = {};
+    todoIds.forEach((id) => {
+      const category = String(store?.getCell("todos", id, "category") || STAGES[0].name);
+      if (!grouped[category]) {
+        grouped[category] = [];
       }
-      return acc;
-    }, {} as Record<string, string[]>);
+      grouped[category].push(id);
+    });
 
     return {
       groupedTasks: grouped,
       totalTasks: todoIds.length
     };
-  }, [todoIds, todosTable]);
-
-  useEffect(() => {
-    console.log('Recipe card distribution updated:', {
-      listId,
-      groupedTasks,
-      totalTasks,
-      allTasks: todosTable,
-      relationshipIds: todoIds
-    });
-  }, [groupedTasks, totalTasks, listId, todosTable, todoIds]);
+  }, [todoIds, store]);
 
   const addTask = useAddRowCallback(
     "todos",
@@ -692,4 +679,6 @@ const styles = StyleSheet.create({
   },
 });
 
-export default BatchCookingList;
+export default function RecipeCard({ listId }: { listId: string }) {
+  return <BatchCookingList listId={listId} />;
+}
