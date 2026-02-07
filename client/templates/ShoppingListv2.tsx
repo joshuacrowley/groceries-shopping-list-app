@@ -2,11 +2,12 @@ import React, { useState, useCallback, useMemo, memo } from "react";
 import {
   View,
   Text,
-  TextInput,
-  Pressable,
-  ScrollView,
-  Alert,
   StyleSheet,
+  ScrollView,
+  Pressable,
+  TextInput,
+  Alert,
+  Modal,
 } from "react-native";
 import {
   useLocalRowIds,
@@ -15,12 +16,11 @@ import {
   useDelRowCallback,
   useAddRowCallback,
   useStore,
-  useCreateQueries,
-  useResultCell,
 } from "tinybase/ui-react";
-import { createQueries } from "tinybase";
-import * as Clipboard from "expo-clipboard";
 import {
+  Trash,
+  CaretDown,
+  CaretRight,
   Orange,
   Egg,
   Fish,
@@ -30,13 +30,9 @@ import {
   Coffee,
   House,
   Question,
-  CaretDown,
-  CaretRight,
-  Trash,
   ClipboardText,
-  Plus,
-  ShoppingCart,
 } from "phosphor-react-native";
+import * as Clipboard from "expo-clipboard";
 
 const CATEGORIES = [
   { name: "Fruits & Vegetables", Icon: Orange },
@@ -51,165 +47,136 @@ const CATEGORIES = [
 ];
 
 const GroceryItem = memo(({ id }: { id: string }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const itemData = useRow("todos", id);
   const store = useStore();
-
   const deleteItem = useDelRowCallback("todos", id);
-
-  const handleDoneToggle = useCallback(() => {
-    store?.setCell("todos", id, "done", !itemData?.done);
-  }, [store, id, itemData?.done]);
-
-  const handleNotesChange = useCallback(
-    (text: string) => {
-      store?.setCell("todos", id, "notes", text);
-    },
-    [store, id]
-  );
-
-  const handleAmountChange = useCallback(
-    (text: string) => {
-      const numValue = parseFloat(text) || 0;
-      store?.setCell("todos", id, "amount", numValue);
-    },
-    [store, id]
-  );
-
-  const handleCategoryChange = useCallback(
-    (newCategory: string) => {
-      store?.setCell("todos", id, "category", newCategory);
-    },
-    [store, id]
-  );
-
-  const handleDelete = useCallback(() => {
-    Alert.alert("Delete Item", "Remove this item from your list?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: deleteItem },
-    ]);
-  }, [deleteItem]);
 
   if (!itemData) return null;
 
+  const isDone = Boolean(itemData.done);
   const hasNotes =
     typeof itemData.notes === "string" && itemData.notes.trim().length > 0;
 
+  const handleToggle = () => {
+    store?.setCell("todos", id, "done", !isDone);
+  };
+
+  const handleDelete = () => {
+    Alert.alert("Delete", "Delete this item?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: deleteItem },
+    ]);
+  };
+
+  const handleCategoryChange = (cat: string) => {
+    store?.setCell("todos", id, "category", cat);
+  };
+
+  const handleNotesChange = (text: string) => {
+    store?.setCell("todos", id, "notes", text);
+  };
+
+  const handleAmountChange = (text: string) => {
+    const val = parseFloat(text);
+    store?.setCell("todos", id, "amount", isNaN(val) ? 0 : val);
+  };
+
   return (
-    <View style={[styles.itemContainer, { opacity: itemData.done ? 0.6 : 1 }]}>
-      <View style={styles.itemHeader}>
-        <Pressable onPress={handleDoneToggle} style={styles.checkbox}>
+    <View style={[styles.itemContainer, isDone && styles.itemDone]}>
+      <View style={styles.itemRow}>
+        <Pressable onPress={handleToggle} style={styles.checkbox}>
           <View
-            style={[
-              styles.checkboxBox,
-              itemData.done && styles.checkboxChecked,
-            ]}
+            style={[styles.checkboxInner, isDone && styles.checkboxChecked]}
           >
-            {itemData.done ? (
-              <Text style={styles.checkboxMark}>✓</Text>
-            ) : null}
+            {isDone && <Text style={styles.checkmark}>✓</Text>}
           </View>
         </Pressable>
-
-        <View style={styles.itemContent}>
-          <Text
-            style={[
-              styles.itemText,
-              itemData.done && styles.strikethrough,
-            ]}
-          >
+        <View style={styles.itemTextContainer}>
+          <Text style={[styles.itemText, isDone && styles.itemTextDone]}>
             {String(itemData.text || "")}
           </Text>
           {hasNotes && (
             <Text
-              style={[styles.itemNotes, itemData.done && styles.strikethrough]}
+              style={[styles.itemNotes, isDone && styles.itemTextDone]}
               numberOfLines={1}
             >
               {String(itemData.notes)}
             </Text>
           )}
         </View>
-
-        <View style={styles.itemActions}>
-          <Text style={styles.itemAmount}>
-            ${Number(itemData.amount || 0).toFixed(2)}
-          </Text>
-          <Pressable
-            onPress={() => setIsExpanded(!isExpanded)}
-            style={styles.expandButton}
-          >
-            {isExpanded ? (
-              <CaretDown size={20} color="#718096" />
-            ) : (
-              <CaretRight size={20} color="#718096" />
-            )}
-          </Pressable>
-          <Pressable onPress={handleDelete} style={styles.deleteButton}>
-            <Trash size={18} color="#E53E3E" weight="bold" />
-          </Pressable>
-        </View>
+        <Text style={styles.itemPrice}>
+          ${Number(itemData.amount || 0).toFixed(2)}
+        </Text>
+        <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
+          {expanded ? (
+            <CaretDown size={18} color="#718096" />
+          ) : (
+            <CaretRight size={18} color="#718096" />
+          )}
+        </Pressable>
+        <Pressable onPress={handleDelete} style={styles.iconBtn}>
+          <Trash size={18} color="#E53E3E" weight="bold" />
+        </Pressable>
       </View>
 
-      {isExpanded && (
-        <View style={styles.expandedContent}>
-          <View style={styles.expandedRow}>
-            <View style={styles.expandedField}>
-              <Text style={styles.fieldLabel}>Category:</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.categorySelector}>
-                  {CATEGORIES.map(({ name }) => (
-                    <Pressable
-                      key={name}
-                      onPress={() => handleCategoryChange(name)}
+      {expanded && (
+        <View style={styles.detailsContainer}>
+          <View style={styles.detailsRow}>
+            <View style={styles.detailHalf}>
+              <Text style={styles.detailLabel}>Category:</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.categoryScroll}
+              >
+                {CATEGORIES.map(({ name }) => (
+                  <Pressable
+                    key={name}
+                    onPress={() => handleCategoryChange(name)}
+                    style={[
+                      styles.categoryChip,
+                      String(itemData.category || "Other") === name &&
+                        styles.categoryChipActive,
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.categoryOption,
+                        styles.categoryChipText,
                         String(itemData.category || "Other") === name &&
-                          styles.selectedCategory,
+                          styles.categoryChipTextActive,
                       ]}
+                      numberOfLines={1}
                     >
-                      <Text
-                        style={[
-                          styles.categoryText,
-                          String(itemData.category || "Other") === name &&
-                            styles.selectedCategoryText,
-                        ]}
-                      >
-                        {name}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                      {name}
+                    </Text>
+                  </Pressable>
+                ))}
               </ScrollView>
             </View>
-          </View>
-
-          <View style={styles.expandedRow}>
-            <View style={styles.expandedField}>
-              <Text style={styles.fieldLabel}>Price:</Text>
-              <View style={styles.priceInput}>
+            <View style={styles.detailHalf}>
+              <Text style={styles.detailLabel}>Price:</Text>
+              <View style={styles.priceInputRow}>
                 <Text style={styles.dollarSign}>$</Text>
                 <TextInput
-                  value={String(itemData.amount || 0)}
+                  style={styles.priceInput}
+                  value={String(Number(itemData.amount || 0).toFixed(2))}
                   onChangeText={handleAmountChange}
-                  placeholder="0.00"
                   keyboardType="decimal-pad"
-                  style={styles.amountInput}
                 />
               </View>
             </View>
           </View>
-
-          <View style={styles.expandedField}>
-            <Text style={styles.fieldLabel}>Notes (recipe, brand, etc.):</Text>
-            <TextInput
-              value={String(itemData.notes || "")}
-              onChangeText={handleNotesChange}
-              placeholder="Add notes about this item..."
-              multiline
-              numberOfLines={2}
-              style={styles.notesInput}
-            />
-          </View>
+          <Text style={styles.detailLabel}>Notes:</Text>
+          <TextInput
+            style={styles.notesInput}
+            value={String(itemData.notes || "")}
+            onChangeText={handleNotesChange}
+            placeholder="Add notes about this item..."
+            placeholderTextColor="#A0AEC0"
+            multiline
+            numberOfLines={2}
+          />
         </View>
       )}
     </View>
@@ -224,32 +191,31 @@ const CategoryGroup = memo(
     isOpen,
     onToggle,
   }: {
-    category: { name: string; Icon: React.ComponentType<any> };
+    category: (typeof CATEGORIES)[0];
     items: string[];
     isOpen: boolean;
     onToggle: () => void;
   }) => {
-    const { Icon } = category;
+    const IconComponent = category.Icon;
 
     return (
       <View style={styles.categoryGroup}>
         <Pressable onPress={onToggle} style={styles.categoryHeader}>
-          <View style={styles.categoryInfo}>
-            <Icon size={24} color="#22543D" />
-            <Text style={styles.categoryName}>{category.name}</Text>
+          <View style={styles.categoryHeaderLeft}>
+            <IconComponent size={22} color="#38A169" />
+            <Text style={styles.categoryTitle}>{category.name}</Text>
           </View>
-          <View style={styles.categoryMeta}>
+          <View style={styles.categoryHeaderRight}>
             <Text style={styles.categoryCount}>
               {items.length} {items.length === 1 ? "item" : "items"}
             </Text>
             {isOpen ? (
-              <CaretDown size={20} color="#718096" />
+              <CaretDown size={18} color="#38A169" />
             ) : (
-              <CaretRight size={20} color="#718096" />
+              <CaretRight size={18} color="#38A169" />
             )}
           </View>
         </Pressable>
-
         {isOpen && (
           <View style={styles.categoryItems}>
             {items.map((id) => (
@@ -266,8 +232,9 @@ CategoryGroup.displayName = "CategoryGroup";
 export default function ShoppingListv2({ listId }: { listId: string }) {
   const [newItem, setNewItem] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].name);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(
-    CATEGORIES.reduce((acc, cat) => ({ ...acc, [cat.name]: true }), {})
+    CATEGORIES.reduce((acc, cat) => ({ ...acc, [cat.name]: true }), {} as Record<string, boolean>)
   );
 
   const todoIds = useLocalRowIds("todoList", listId) || [];
@@ -277,9 +244,7 @@ export default function ShoppingListv2({ listId }: { listId: string }) {
   const { categorizedItems, uncategorizedItems } = useMemo(() => {
     return todoIds.reduce(
       (acc, id) => {
-        const cat = String(
-          store?.getCell("todos", id, "category") || "Other"
-        );
+        const cat = String(store?.getCell("todos", id, "category") || "Other");
         const categoryExists = CATEGORIES.some((c) => c.name === cat);
         if (categoryExists) {
           if (!acc.categorizedItems[cat]) acc.categorizedItems[cat] = [];
@@ -315,27 +280,25 @@ export default function ShoppingListv2({ listId }: { listId: string }) {
     }
   );
 
-  const handleAddItem = useCallback(() => {
-    if (newItem.trim() !== "") {
-      addItem(newItem);
-    }
-  }, [addItem, newItem]);
-
-  const queries = useCreateQueries(store, (store) => {
-    return createQueries(store).setQueryDefinition(
-      "totalAmount",
-      "todos",
-      ({ select, where, group }) => {
-        select("amount");
-        where("list", listId);
-        where("done", false);
-        group("amount", "sum").as("total");
+  const totalAmount = useMemo(() => {
+    return todoIds.reduce((sum, id) => {
+      const done = store?.getCell("todos", id, "done");
+      if (!done) {
+        const amount = Number(store?.getCell("todos", id, "amount") || 0);
+        return sum + amount;
       }
-    );
-  });
+      return sum;
+    }, 0);
+  }, [todoIds, store]);
 
-  const totalAmountCell = useResultCell("totalAmount", "0", "total", queries);
-  const totalAmount = Number(totalAmountCell) || 0;
+  const progressLabel = useMemo(() => {
+    const count = todoIds.length;
+    if (count === 0) return "Time to start shopping! 🛒";
+    if (count <= 5) return "Quick shop today 🧺";
+    if (count <= 15) return "Good haul coming up 🛍️";
+    if (count <= 25) return "Big shop energy! 💪";
+    return "Stocking up the pantry! 🏪";
+  }, [todoIds.length]);
 
   const toggleCategory = useCallback((category: string) => {
     setOpenCategories((prev) => ({
@@ -344,9 +307,16 @@ export default function ShoppingListv2({ listId }: { listId: string }) {
     }));
   }, []);
 
+  const handleAddItem = useCallback(() => {
+    if (newItem.trim() !== "") {
+      addItem(newItem);
+    }
+  }, [addItem, newItem]);
+
   const handleCopyList = useCallback(async () => {
+    if (!store) return;
     const activeItems = todoIds.filter(
-      (id) => !store?.getCell("todos", id, "done")
+      (id) => !store.getCell("todos", id, "done")
     );
     if (activeItems.length === 0) {
       Alert.alert("Info", "List is empty or all items are done");
@@ -355,7 +325,7 @@ export default function ShoppingListv2({ listId }: { listId: string }) {
 
     const listContent = activeItems
       .map((id) => {
-        const item = store?.getRow("todos", id);
+        const item = store.getRow("todos", id);
         if (item) {
           const itemText = String(item.text || "");
           const itemAmount =
@@ -375,72 +345,93 @@ export default function ShoppingListv2({ listId }: { listId: string }) {
 
     try {
       await Clipboard.setStringAsync(listContent);
-      Alert.alert("Success", "List copied to clipboard!");
+      Alert.alert("Copied!", "List copied to clipboard");
     } catch (err) {
-      console.error("Failed to copy list: ", err);
       Alert.alert("Error", "Failed to copy list");
     }
   }, [todoIds, store]);
 
-  const progressLabel = useMemo(() => {
-    const count = todoIds.length;
-    if (count === 0) return "Time to start shopping!";
-    if (count <= 5) return "Quick shop today";
-    if (count <= 15) return "Good haul coming up";
-    if (count <= 25) return "Big shop energy!";
-    return "Stocking up the pantry!";
-  }, [todoIds.length]);
-
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.headerInfo}>
-            <ShoppingCart size={32} color="#22543D" weight="fill" />
-            <View>
-              <Text style={styles.listTitle}>
-                {String(listData?.name || "Shopping")}
-              </Text>
-              <Text style={styles.progressLabel}>{progressLabel}</Text>
-            </View>
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.listTitle}>
+              {String(listData?.name || "Shopping")}
+            </Text>
+            <Text style={styles.progressLabel}>{progressLabel}</Text>
           </View>
-          <View style={styles.headerActions}>
+          <View style={styles.headerRight}>
             <View style={styles.totalBadge}>
-              <Text style={styles.totalAmount}>
+              <Text style={styles.totalBadgeText}>
                 ${totalAmount.toFixed(2)}
               </Text>
             </View>
-            <Pressable onPress={handleCopyList} style={styles.copyButton}>
-              <ClipboardText size={20} color="#718096" weight="bold" />
+            <Pressable onPress={handleCopyList} style={styles.iconBtn}>
+              <ClipboardText size={22} color="#38A169" weight="bold" />
             </Pressable>
           </View>
         </View>
 
-        <View style={styles.addItemSection}>
+        {/* Add Item */}
+        <View style={styles.addRow}>
           <TextInput
+            style={styles.addInput}
             value={newItem}
             onChangeText={setNewItem}
-            onSubmitEditing={handleAddItem}
             placeholder="Add a new item"
-            style={styles.addItemInput}
             placeholderTextColor="#A0AEC0"
+            onSubmitEditing={handleAddItem}
             returnKeyType="done"
           />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.categorySelector}>
-              {CATEGORIES.map(({ name }) => (
+          <Pressable
+            onPress={() => setShowCategoryPicker(true)}
+            style={styles.categoryPickerBtn}
+          >
+            <Text style={styles.categoryPickerText} numberOfLines={1}>
+              {selectedCategory}
+            </Text>
+            <CaretDown size={14} color="#718096" />
+          </Pressable>
+          <Pressable onPress={handleAddItem} style={styles.addButton}>
+            <Text style={styles.addButtonText}>Add</Text>
+          </Pressable>
+        </View>
+
+        {/* Category Picker Modal */}
+        <Modal
+          visible={showCategoryPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowCategoryPicker(false)}
+        >
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => setShowCategoryPicker(false)}
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Select Category</Text>
+              {CATEGORIES.map(({ name, Icon }) => (
                 <Pressable
                   key={name}
-                  onPress={() => setSelectedCategory(name)}
+                  onPress={() => {
+                    setSelectedCategory(name);
+                    setShowCategoryPicker(false);
+                  }}
                   style={[
-                    styles.categoryOption,
-                    selectedCategory === name && styles.selectedCategory,
+                    styles.modalOption,
+                    selectedCategory === name && styles.modalOptionActive,
                   ]}
                 >
+                  <Icon
+                    size={20}
+                    color={selectedCategory === name ? "#38A169" : "#718096"}
+                  />
                   <Text
                     style={[
-                      styles.categoryText,
-                      selectedCategory === name && styles.selectedCategoryText,
+                      styles.modalOptionText,
+                      selectedCategory === name && styles.modalOptionTextActive,
                     ]}
                   >
                     {name}
@@ -448,41 +439,37 @@ export default function ShoppingListv2({ listId }: { listId: string }) {
                 </Pressable>
               ))}
             </View>
-          </ScrollView>
-          <Pressable onPress={handleAddItem} style={styles.addButton}>
-            <Plus size={18} color="#FFFFFF" weight="bold" />
-            <Text style={styles.addButtonText}>Add</Text>
           </Pressable>
-        </View>
+        </Modal>
 
-        <View style={styles.categoriesList}>
-          {CATEGORIES.map((category) => {
-            const items = categorizedItems[category.name] || [];
-            return items.length > 0 ? (
-              <CategoryGroup
-                key={category.name}
-                category={category}
-                items={items}
-                isOpen={openCategories[category.name]}
-                onToggle={() => toggleCategory(category.name)}
-              />
-            ) : null;
-          })}
-
-          {uncategorizedItems.length > 0 && (
+        {/* Items by Category */}
+        {CATEGORIES.map((category) => {
+          const items = categorizedItems[category.name] || [];
+          return items.length > 0 ? (
             <CategoryGroup
-              key="Other"
-              category={CATEGORIES[CATEGORIES.length - 1]}
-              items={uncategorizedItems}
-              isOpen={openCategories["Other"]}
-              onToggle={() => toggleCategory("Other")}
+              key={category.name}
+              category={category}
+              items={items}
+              isOpen={openCategories[category.name]}
+              onToggle={() => toggleCategory(category.name)}
             />
-          )}
-        </View>
+          ) : null;
+        })}
 
+        {uncategorizedItems.length > 0 && (
+          <CategoryGroup
+            key="Other"
+            category={CATEGORIES[CATEGORIES.length - 1]}
+            items={uncategorizedItems}
+            isOpen={openCategories["Other"]}
+            onToggle={() => toggleCategory("Other")}
+          />
+        )}
+
+        {/* Empty State */}
         {todoIds.length === 0 && (
           <View style={styles.emptyState}>
-            <ShoppingCart size={48} color="#CBD5E0" />
+            <Text style={styles.emptyEmoji}>🛒</Text>
             <Text style={styles.emptyTitle}>Your list is empty!</Text>
             <Text style={styles.emptySubtitle}>
               Add items above to start building your shopping list
@@ -500,31 +487,26 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0FFF4",
   },
   content: {
-    padding: 20,
+    padding: 16,
   },
-  header: {
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 20,
-  },
-  headerInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-    gap: 12,
+    marginBottom: 16,
   },
   listTitle: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#22543D",
+    color: "#276749",
   },
   progressLabel: {
     fontSize: 12,
-    color: "#38A169",
+    color: "#48BB78",
     fontStyle: "italic",
+    marginTop: 2,
   },
-  headerActions: {
+  headerRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -532,76 +514,57 @@ const styles = StyleSheet.create({
   totalBadge: {
     backgroundColor: "#C6F6D5",
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
-  totalAmount: {
+  totalBadgeText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#22543D",
+    color: "#276749",
   },
-  copyButton: {
-    padding: 8,
+  addRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
   },
-  addItemSection: {
-    backgroundColor: "#FFFFFF",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    gap: 12,
-  },
-  addItemInput: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
+  addInput: {
+    flex: 1,
     backgroundColor: "#FFFFFF",
     borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#2D3748",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    color: "#2D3748",
   },
-  categorySelector: {
+  categoryPickerBtn: {
     flexDirection: "row",
-    gap: 8,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    maxWidth: 130,
   },
-  categoryOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#E2E8F0",
-  },
-  selectedCategory: {
-    backgroundColor: "#C6F6D5",
-  },
-  categoryText: {
+  categoryPickerText: {
     fontSize: 13,
     color: "#4A5568",
-  },
-  selectedCategoryText: {
-    color: "#22543D",
-    fontWeight: "600",
+    marginRight: 4,
   },
   addButton: {
     backgroundColor: "#38A169",
-    paddingVertical: 12,
     borderRadius: 8,
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   addButtonText: {
     color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  categoriesList: {
-    gap: 8,
+    fontWeight: "600",
+    fontSize: 15,
   },
   categoryGroup: {
     marginBottom: 8,
@@ -610,29 +573,29 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 12,
     backgroundColor: "#C6F6D5",
     borderRadius: 8,
+    padding: 10,
   },
-  categoryInfo: {
+  categoryHeaderLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  categoryName: {
+  categoryTitle: {
     fontWeight: "bold",
-    fontSize: 16,
-    color: "#22543D",
+    color: "#276749",
+    fontSize: 15,
   },
-  categoryMeta: {
+  categoryHeaderRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   categoryCount: {
     fontSize: 13,
     fontWeight: "500",
-    color: "#22543D",
+    color: "#276749",
   },
   categoryItems: {
     marginTop: 4,
@@ -641,21 +604,26 @@ const styles = StyleSheet.create({
   itemContainer: {
     backgroundColor: "#FFFFFF",
     borderRadius: 8,
-    padding: 12,
+    overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
-  itemHeader: {
+  itemDone: {
+    opacity: 0.6,
+  },
+  itemRow: {
     flexDirection: "row",
     alignItems: "center",
+    padding: 8,
+    gap: 8,
   },
   checkbox: {
-    marginRight: 12,
+    padding: 4,
   },
-  checkboxBox: {
+  checkboxInner: {
     width: 22,
     height: 22,
     borderRadius: 4,
@@ -668,81 +636,92 @@ const styles = StyleSheet.create({
     backgroundColor: "#38A169",
     borderColor: "#38A169",
   },
-  checkboxMark: {
+  checkmark: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "bold",
   },
-  itemContent: {
+  itemTextContainer: {
     flex: 1,
   },
   itemText: {
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 15,
     color: "#2D3748",
+  },
+  itemTextDone: {
+    textDecorationLine: "line-through",
+    color: "#A0AEC0",
   },
   itemNotes: {
     fontSize: 12,
     color: "#718096",
-    marginTop: 2,
   },
-  strikethrough: {
-    textDecorationLine: "line-through",
-  },
-  itemActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  itemAmount: {
-    fontSize: 14,
-    fontWeight: "600",
+  itemPrice: {
+    fontSize: 13,
     color: "#2D3748",
-    marginRight: 4,
+    fontWeight: "500",
   },
-  expandButton: {
-    padding: 4,
+  iconBtn: {
+    padding: 6,
   },
-  deleteButton: {
-    padding: 4,
-  },
-  expandedContent: {
-    marginTop: 12,
-    padding: 12,
+  detailsContainer: {
     backgroundColor: "#F7FAFC",
-    borderRadius: 8,
-    gap: 12,
-  },
-  expandedRow: {
+    padding: 12,
     gap: 8,
   },
-  expandedField: {
+  detailsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  detailHalf: {
     flex: 1,
   },
-  fieldLabel: {
+  detailLabel: {
     fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 6,
+    fontWeight: "500",
+    color: "#4A5568",
+    marginBottom: 4,
+  },
+  categoryScroll: {
+    flexGrow: 0,
+  },
+  categoryChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: "#EDF2F7",
+    marginRight: 6,
+  },
+  categoryChipActive: {
+    backgroundColor: "#38A169",
+  },
+  categoryChipText: {
+    fontSize: 12,
     color: "#4A5568",
   },
-  priceInput: {
+  categoryChipTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  priceInputRow: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 6,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
   },
   dollarSign: {
-    fontSize: 16,
-    marginRight: 4,
-    color: "#2D3748",
+    paddingHorizontal: 8,
+    fontSize: 14,
+    color: "#718096",
+    fontWeight: "500",
   },
-  amountInput: {
+  priceInput: {
     flex: 1,
-    fontSize: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    fontSize: 14,
     color: "#2D3748",
   },
   notesInput: {
@@ -750,27 +729,73 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    padding: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     fontSize: 14,
-    textAlignVertical: "top",
     color: "#2D3748",
-    minHeight: 60,
+    minHeight: 50,
+    textAlignVertical: "top",
   },
   emptyState: {
     alignItems: "center",
     paddingVertical: 40,
     gap: 8,
   },
+  emptyEmoji: {
+    fontSize: 48,
+  },
   emptyTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#22543D",
-    textAlign: "center",
+    color: "#276749",
   },
   emptySubtitle: {
     fontSize: 14,
-    color: "#38A169",
+    color: "#48BB78",
     textAlign: "center",
     maxWidth: 280,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    width: 280,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#2D3748",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  modalOptionActive: {
+    backgroundColor: "#F0FFF4",
+  },
+  modalOptionText: {
+    fontSize: 15,
+    color: "#4A5568",
+  },
+  modalOptionTextActive: {
+    color: "#38A169",
+    fontWeight: "600",
   },
 });
