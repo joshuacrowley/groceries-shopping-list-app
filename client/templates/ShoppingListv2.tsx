@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, memo } from "react";
 import {
   View,
   Text,
@@ -7,8 +7,7 @@ import {
   ScrollView,
   Alert,
   StyleSheet,
-  Dimensions,
-} from 'react-native';
+} from "react-native";
 import {
   useLocalRowIds,
   useRow,
@@ -18,152 +17,135 @@ import {
   useStore,
   useCreateQueries,
   useResultCell,
-  useTable,
-} from 'tinybase/ui-react';
-import { createQueries } from 'tinybase';
-import { Feather } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
-import PhosphorIcon from '@/components/PhosphorIcon';
-import { 
-  chakraColors, 
-  typography, 
-  spacing, 
-  radii, 
-  shadows 
-} from '@/constants/Colors';
-
-const { width } = Dimensions.get('window');
+} from "tinybase/ui-react";
+import { createQueries } from "tinybase";
+import * as Clipboard from "expo-clipboard";
+import {
+  Orange,
+  Egg,
+  Fish,
+  Bread,
+  Package,
+  Snowflake,
+  Coffee,
+  House,
+  Question,
+  CaretDown,
+  CaretRight,
+  Trash,
+  ClipboardText,
+  Plus,
+  ShoppingCart,
+} from "phosphor-react-native";
 
 const CATEGORIES = [
-  { name: 'Fruits & Vegetables', icon: 'Orange' },
-  { name: 'Dairy & Eggs', icon: 'Egg' },
-  { name: 'Meat & Seafood', icon: 'Fish' },
-  { name: 'Bakery', icon: 'Bread' },
-  { name: 'Pantry', icon: 'Package' },
-  { name: 'Frozen Foods', icon: 'Snowflake' },
-  { name: 'Beverages', icon: 'Coffee' },
-  { name: 'Household', icon: 'House' },
-  { name: 'Other', icon: 'Question' },
+  { name: "Fruits & Vegetables", Icon: Orange },
+  { name: "Dairy & Eggs", Icon: Egg },
+  { name: "Meat & Seafood", Icon: Fish },
+  { name: "Bakery", Icon: Bread },
+  { name: "Pantry", Icon: Package },
+  { name: "Frozen Foods", Icon: Snowflake },
+  { name: "Beverages", Icon: Coffee },
+  { name: "Household", Icon: House },
+  { name: "Other", Icon: Question },
 ];
 
-// Chakra UI compatible color mappings - matching web version exactly
-const COLORS = {
-  lightGreen: chakraColors.green[50], // Very light green background
-  white: chakraColors.white,
-  darkGray: chakraColors.green[800], // Darker green text to match web
-  mediumGray: chakraColors.gray[500],
-  lightGray: chakraColors.gray[200],
-  red: chakraColors.red[500],
-  green: chakraColors.green[500],
-  background: chakraColors.green[50], // Light green background like web
-  inputBg: chakraColors.white,
-  containerBg: chakraColors.green[50], // Main container background
-  badgeGreen: chakraColors.green[100], // Light green for selected categories
-  badgeText: chakraColors.green[600], // Darker green for badge text
-};
-
-interface GroceryItemProps {
-  id: string;
-}
-
-const GroceryItem: React.FC<GroceryItemProps> = ({ id }) => {
+const GroceryItem = memo(({ id }: { id: string }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [notes, setNotes] = useState('');
-  const [amount, setAmount] = useState('0');
-  const [category, setCategory] = useState('Other');
-  
-  const itemData = useRow('todos', id);
+  const itemData = useRow("todos", id);
+  const store = useStore();
 
-  const updateItem = useSetRowCallback(
-    'todos',
-    id,
-    (updates) => ({ ...itemData, ...updates }),
-    [itemData]
-  );
-
-  const deleteItem = useDelRowCallback('todos', id);
-
-  useEffect(() => {
-    if (itemData) {
-      setNotes(String(itemData.notes || ''));
-      setAmount(String(itemData.amount || 0));
-      setCategory(String(itemData.category || 'Other'));
-    }
-  }, [itemData]);
+  const deleteItem = useDelRowCallback("todos", id);
 
   const handleDoneToggle = useCallback(() => {
-    updateItem({ done: !Boolean(itemData?.done) });
-  }, [updateItem, itemData?.done]);
+    store?.setCell("todos", id, "done", !itemData?.done);
+  }, [store, id, itemData?.done]);
 
-  const handleNotesChange = useCallback((text: string) => {
-    setNotes(text);
-    updateItem({ notes: text });
-  }, [updateItem]);
+  const handleNotesChange = useCallback(
+    (text: string) => {
+      store?.setCell("todos", id, "notes", text);
+    },
+    [store, id]
+  );
 
-  const handleAmountChange = useCallback((text: string) => {
-    setAmount(text);
-    const numValue = parseFloat(text) || 0;
-    updateItem({ amount: numValue });
-  }, [updateItem]);
+  const handleAmountChange = useCallback(
+    (text: string) => {
+      const numValue = parseFloat(text) || 0;
+      store?.setCell("todos", id, "amount", numValue);
+    },
+    [store, id]
+  );
 
-  const handleCategoryChange = useCallback((newCategory: string) => {
-    setCategory(newCategory);
-    updateItem({ category: newCategory });
-  }, [updateItem]);
+  const handleCategoryChange = useCallback(
+    (newCategory: string) => {
+      store?.setCell("todos", id, "category", newCategory);
+    },
+    [store, id]
+  );
 
-  const toggleExpanded = useCallback(() => {
-    setIsExpanded(!isExpanded);
-  }, [isExpanded]);
+  const handleDelete = useCallback(() => {
+    Alert.alert("Delete Item", "Remove this item from your list?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: deleteItem },
+    ]);
+  }, [deleteItem]);
 
-  const hasNotes = notes.trim().length > 0;
-  const opacity = Boolean(itemData?.done) ? 0.6 : 1;
+  if (!itemData) return null;
+
+  const hasNotes =
+    typeof itemData.notes === "string" && itemData.notes.trim().length > 0;
 
   return (
-    <View style={[styles.itemContainer, { opacity }]}>
+    <View style={[styles.itemContainer, { opacity: itemData.done ? 0.6 : 1 }]}>
       <View style={styles.itemHeader}>
         <Pressable onPress={handleDoneToggle} style={styles.checkbox}>
-          <Feather 
-            name={Boolean(itemData?.done) ? 'check-square' : 'square'} 
-            size={20} 
-            color={Boolean(itemData?.done) ? COLORS.green : COLORS.mediumGray} 
-          />
-        </Pressable>
-        
-        <View style={styles.itemContent}>
-          <Text 
+          <View
             style={[
-              styles.itemText,
-              Boolean(itemData?.done) && styles.strikethrough
+              styles.checkboxBox,
+              itemData.done && styles.checkboxChecked,
             ]}
           >
-            {String(itemData?.text || '')}
+            {itemData.done ? (
+              <Text style={styles.checkboxMark}>✓</Text>
+            ) : null}
+          </View>
+        </Pressable>
+
+        <View style={styles.itemContent}>
+          <Text
+            style={[
+              styles.itemText,
+              itemData.done && styles.strikethrough,
+            ]}
+          >
+            {String(itemData.text || "")}
           </Text>
           {hasNotes && (
-            <Text 
-              style={[
-                styles.itemNotes, 
-                Boolean(itemData?.done) && styles.strikethrough
-              ]}
+            <Text
+              style={[styles.itemNotes, itemData.done && styles.strikethrough]}
               numberOfLines={1}
             >
-              {notes}
+              {String(itemData.notes)}
             </Text>
           )}
         </View>
 
         <View style={styles.itemActions}>
           <Text style={styles.itemAmount}>
-            ${Number(itemData?.amount || 0).toFixed(2)}
+            ${Number(itemData.amount || 0).toFixed(2)}
           </Text>
-          <Pressable onPress={toggleExpanded} style={styles.expandButton}>
-            <Feather 
-              name={isExpanded ? 'chevron-down' : 'chevron-right'} 
-              size={20} 
-              color={COLORS.mediumGray} 
-            />
+          <Pressable
+            onPress={() => setIsExpanded(!isExpanded)}
+            style={styles.expandButton}
+          >
+            {isExpanded ? (
+              <CaretDown size={20} color="#718096" />
+            ) : (
+              <CaretRight size={20} color="#718096" />
+            )}
           </Pressable>
-          <Pressable onPress={deleteItem} style={styles.deleteButton}>
-            <Feather name="trash-2" size={18} color={COLORS.red} />
+          <Pressable onPress={handleDelete} style={styles.deleteButton}>
+            <Trash size={18} color="#E53E3E" weight="bold" />
           </Pressable>
         </View>
       </View>
@@ -181,13 +163,17 @@ const GroceryItem: React.FC<GroceryItemProps> = ({ id }) => {
                       onPress={() => handleCategoryChange(name)}
                       style={[
                         styles.categoryOption,
-                        category === name && styles.selectedCategory
+                        String(itemData.category || "Other") === name &&
+                          styles.selectedCategory,
                       ]}
                     >
-                      <Text style={[
-                        styles.categoryText,
-                        category === name && styles.selectedCategoryText
-                      ]}>
+                      <Text
+                        style={[
+                          styles.categoryText,
+                          String(itemData.category || "Other") === name &&
+                            styles.selectedCategoryText,
+                        ]}
+                      >
                         {name}
                       </Text>
                     </Pressable>
@@ -203,7 +189,7 @@ const GroceryItem: React.FC<GroceryItemProps> = ({ id }) => {
               <View style={styles.priceInput}>
                 <Text style={styles.dollarSign}>$</Text>
                 <TextInput
-                  value={amount}
+                  value={String(itemData.amount || 0)}
                   onChangeText={handleAmountChange}
                   placeholder="0.00"
                   keyboardType="decimal-pad"
@@ -214,9 +200,9 @@ const GroceryItem: React.FC<GroceryItemProps> = ({ id }) => {
           </View>
 
           <View style={styles.expandedField}>
-            <Text style={styles.fieldLabel}>Notes:</Text>
+            <Text style={styles.fieldLabel}>Notes (recipe, brand, etc.):</Text>
             <TextInput
-              value={notes}
+              value={String(itemData.notes || "")}
               onChangeText={handleNotesChange}
               placeholder="Add notes about this item..."
               multiline
@@ -228,136 +214,127 @@ const GroceryItem: React.FC<GroceryItemProps> = ({ id }) => {
       )}
     </View>
   );
-};
+});
+GroceryItem.displayName = "GroceryItem";
 
-interface CategoryGroupProps {
-  category: { name: string; icon: string };
-  items: string[];
-  isOpen: boolean;
-  onToggle: () => void;
-}
+const CategoryGroup = memo(
+  ({
+    category,
+    items,
+    isOpen,
+    onToggle,
+  }: {
+    category: { name: string; Icon: React.ComponentType<any> };
+    items: string[];
+    isOpen: boolean;
+    onToggle: () => void;
+  }) => {
+    const { Icon } = category;
 
-const CategoryGroup: React.FC<CategoryGroupProps> = ({ 
-  category, 
-  items, 
-  isOpen, 
-  onToggle 
-}) => {
+    return (
+      <View style={styles.categoryGroup}>
+        <Pressable onPress={onToggle} style={styles.categoryHeader}>
+          <View style={styles.categoryInfo}>
+            <Icon size={24} color="#22543D" />
+            <Text style={styles.categoryName}>{category.name}</Text>
+          </View>
+          <View style={styles.categoryMeta}>
+            <Text style={styles.categoryCount}>
+              {items.length} {items.length === 1 ? "item" : "items"}
+            </Text>
+            {isOpen ? (
+              <CaretDown size={20} color="#718096" />
+            ) : (
+              <CaretRight size={20} color="#718096" />
+            )}
+          </View>
+        </Pressable>
 
-  return (
-    <View style={styles.categoryGroup}>
-      <Pressable 
-        onPress={onToggle} 
-        style={styles.categoryHeader}
-      >
-        <View style={styles.categoryInfo}>
-          <PhosphorIcon name={category.icon} size={24} color={COLORS.darkGray} />
-          <Text style={styles.categoryName}>
-            {category.name}
-          </Text>
-        </View>
-        <View style={styles.categoryMeta}>
-          <Text style={styles.categoryCount}>
-            {items.length} {items.length === 1 ? 'item' : 'items'}
-          </Text>
-          <Feather 
-            name={isOpen ? 'chevron-down' : 'chevron-right'} 
-            size={20} 
-            color={COLORS.mediumGray} 
-          />
-        </View>
-      </Pressable>
-      
-      {isOpen && (
-        <View style={styles.categoryItems}>
-          {items.map((id) => (
-            <GroceryItem key={id} id={id} />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-};
+        {isOpen && (
+          <View style={styles.categoryItems}>
+            {items.map((id) => (
+              <GroceryItem key={id} id={id} />
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  }
+);
+CategoryGroup.displayName = "CategoryGroup";
 
-interface ShoppingListv2Props {
-  listId: string;
-}
-
-const ShoppingListv2: React.FC<ShoppingListv2Props> = ({ listId }) => {
-  const [newItem, setNewItem] = useState('');
+export default function ShoppingListv2({ listId }: { listId: string }) {
+  const [newItem, setNewItem] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0].name);
-  const [openCategories, setOpenCategories] = useState(
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>(
     CATEGORIES.reduce((acc, cat) => ({ ...acc, [cat.name]: true }), {})
   );
 
-  const todosTable = useTable('todos');
-  const todoIds = useLocalRowIds('todoList', listId) || [];
-  const listData = useRow('lists', listId);
+  const todoIds = useLocalRowIds("todoList", listId) || [];
+  const listData = useRow("lists", listId);
   const store = useStore();
-
 
   const { categorizedItems, uncategorizedItems } = useMemo(() => {
     return todoIds.reduce(
       (acc, id) => {
-        const item = todosTable?.[id];
-        if (item) {
-          const category = String(item.category || 'Other');
-          const categoryExists = CATEGORIES.some(cat => cat.name === category);
-          if (categoryExists) {
-            if (!acc.categorizedItems[category]) {
-              acc.categorizedItems[category] = [];
-            }
-            acc.categorizedItems[category].push(id);
-          } else {
-            acc.uncategorizedItems.push(id);
-          }
+        const cat = String(
+          store?.getCell("todos", id, "category") || "Other"
+        );
+        const categoryExists = CATEGORIES.some((c) => c.name === cat);
+        if (categoryExists) {
+          if (!acc.categorizedItems[cat]) acc.categorizedItems[cat] = [];
+          acc.categorizedItems[cat].push(id);
+        } else {
+          acc.uncategorizedItems.push(id);
         }
         return acc;
       },
-      { categorizedItems: {}, uncategorizedItems: [] }
+      {
+        categorizedItems: {} as Record<string, string[]>,
+        uncategorizedItems: [] as string[],
+      }
     );
-  }, [todoIds, todosTable]);
+  }, [todoIds, store]);
 
   const addItem = useAddRowCallback(
-    'todos',
+    "todos",
     (text: string) => ({
       text: text.trim(),
       amount: 0,
       category: selectedCategory,
       list: listId,
       done: false,
-      notes: '',
+      notes: "",
     }),
     [listId, selectedCategory],
     undefined,
     (rowId) => {
       if (rowId) {
-        setNewItem('');
-        setSelectedCategory(CATEGORIES[0].name);
+        setNewItem("");
       }
     }
   );
 
   const handleAddItem = useCallback(() => {
-    if (newItem.trim() !== '') {
+    if (newItem.trim() !== "") {
       addItem(newItem);
     }
   }, [addItem, newItem]);
 
   const queries = useCreateQueries(store, (store) => {
     return createQueries(store).setQueryDefinition(
-      'totalAmount',
-      'todos',
+      "totalAmount",
+      "todos",
       ({ select, where, group }) => {
-        select('amount');
-        where('list', listId);
-        where('done', false);
-        group('amount', 'sum').as('total');
+        select("amount");
+        where("list", listId);
+        where("done", false);
+        group("amount", "sum").as("total");
       }
     );
   });
 
-  const totalAmountCell = useResultCell('totalAmount', '0', 'total', queries);
+  const totalAmountCell = useResultCell("totalAmount", "0", "total", queries);
   const totalAmount = Number(totalAmountCell) || 0;
 
   const toggleCategory = useCallback((category: string) => {
@@ -368,53 +345,73 @@ const ShoppingListv2: React.FC<ShoppingListv2Props> = ({ listId }) => {
   }, []);
 
   const handleCopyList = useCallback(async () => {
-    const activeItems = todoIds.filter(id => !store.getCell('todos', id, 'done'));
+    const activeItems = todoIds.filter(
+      (id) => !store?.getCell("todos", id, "done")
+    );
     if (activeItems.length === 0) {
-      Alert.alert('Info', 'List is empty or all items are done');
+      Alert.alert("Info", "List is empty or all items are done");
       return;
     }
 
-    const listContent = activeItems.map(id => {
-      const item = store.getRow('todos', id);
-      if (item) {
-        const itemText = String(item.text || '');
-        const itemAmount = Number(item.amount || 0) > 0 ? `$${Number(item.amount).toFixed(2)}` : '';
-        const itemNotes = typeof item.notes === 'string' && item.notes ? ` (${item.notes})` : '';
-        return `- ${itemText}${itemAmount ? ` - ${itemAmount}` : ''}${itemNotes}`;
-      }
-      return '';
-    }).filter(Boolean).join('\n');
+    const listContent = activeItems
+      .map((id) => {
+        const item = store?.getRow("todos", id);
+        if (item) {
+          const itemText = String(item.text || "");
+          const itemAmount =
+            Number(item.amount || 0) > 0
+              ? `$${Number(item.amount).toFixed(2)}`
+              : "";
+          const itemNotes =
+            typeof item.notes === "string" && item.notes
+              ? ` (${item.notes})`
+              : "";
+          return `- ${itemText}${itemAmount ? ` - ${itemAmount}` : ""}${itemNotes}`;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
 
     try {
       await Clipboard.setStringAsync(listContent);
-      Alert.alert('Success', 'List copied to clipboard!');
+      Alert.alert("Success", "List copied to clipboard!");
     } catch (err) {
-      console.error('Failed to copy list: ', err);
-      Alert.alert('Error', 'Failed to copy list');
+      console.error("Failed to copy list: ", err);
+      Alert.alert("Error", "Failed to copy list");
     }
   }, [todoIds, store]);
+
+  const progressLabel = useMemo(() => {
+    const count = todoIds.length;
+    if (count === 0) return "Time to start shopping!";
+    if (count <= 5) return "Quick shop today";
+    if (count <= 15) return "Good haul coming up";
+    if (count <= 25) return "Big shop energy!";
+    return "Stocking up the pantry!";
+  }, [todoIds.length]);
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerInfo}>
-            <PhosphorIcon 
-              name={String(listData?.icon || 'Handbag')} 
-              size={32} 
-              color={COLORS.darkGray} 
-              weight="fill" 
-            />
-            <Text style={styles.listTitle}>
-              {String(listData?.name || 'Shopping')}
-            </Text>
+            <ShoppingCart size={32} color="#22543D" weight="fill" />
+            <View>
+              <Text style={styles.listTitle}>
+                {String(listData?.name || "Shopping")}
+              </Text>
+              <Text style={styles.progressLabel}>{progressLabel}</Text>
+            </View>
           </View>
           <View style={styles.headerActions}>
-            <Text style={styles.totalAmount}>
-              Total: ${totalAmount.toFixed(2)}
-            </Text>
+            <View style={styles.totalBadge}>
+              <Text style={styles.totalAmount}>
+                ${totalAmount.toFixed(2)}
+              </Text>
+            </View>
             <Pressable onPress={handleCopyList} style={styles.copyButton}>
-              <PhosphorIcon name="ClipboardText" size={20} color={COLORS.mediumGray} />
+              <ClipboardText size={20} color="#718096" weight="bold" />
             </Pressable>
           </View>
         </View>
@@ -423,9 +420,11 @@ const ShoppingListv2: React.FC<ShoppingListv2Props> = ({ listId }) => {
           <TextInput
             value={newItem}
             onChangeText={setNewItem}
+            onSubmitEditing={handleAddItem}
             placeholder="Add a new item"
             style={styles.addItemInput}
-            placeholderTextColor={COLORS.mediumGray}
+            placeholderTextColor="#A0AEC0"
+            returnKeyType="done"
           />
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.categorySelector}>
@@ -435,13 +434,15 @@ const ShoppingListv2: React.FC<ShoppingListv2Props> = ({ listId }) => {
                   onPress={() => setSelectedCategory(name)}
                   style={[
                     styles.categoryOption,
-                    selectedCategory === name && styles.selectedCategory
+                    selectedCategory === name && styles.selectedCategory,
                   ]}
                 >
-                  <Text style={[
-                    styles.categoryText,
-                    selectedCategory === name && styles.selectedCategoryText
-                  ]}>
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      selectedCategory === name && styles.selectedCategoryText,
+                    ]}
+                  >
                     {name}
                   </Text>
                 </Pressable>
@@ -449,6 +450,7 @@ const ShoppingListv2: React.FC<ShoppingListv2Props> = ({ listId }) => {
             </View>
           </ScrollView>
           <Pressable onPress={handleAddItem} style={styles.addButton}>
+            <Plus size={18} color="#FFFFFF" weight="bold" />
             <Text style={styles.addButtonText}>Add</Text>
           </Pressable>
         </View>
@@ -466,279 +468,309 @@ const ShoppingListv2: React.FC<ShoppingListv2Props> = ({ listId }) => {
               />
             ) : null;
           })}
-          
+
           {uncategorizedItems.length > 0 && (
             <CategoryGroup
               key="Other"
               category={CATEGORIES[CATEGORIES.length - 1]}
               items={uncategorizedItems}
-              isOpen={openCategories['Other']}
-              onToggle={() => toggleCategory('Other')}
+              isOpen={openCategories["Other"]}
+              onToggle={() => toggleCategory("Other")}
             />
           )}
         </View>
 
         {todoIds.length === 0 && (
-          <Text style={styles.emptyMessage}>
-            Your grocery list is empty. Start adding items!
-          </Text>
+          <View style={styles.emptyState}>
+            <ShoppingCart size={48} color="#CBD5E0" />
+            <Text style={styles.emptyTitle}>Your list is empty!</Text>
+            <Text style={styles.emptySubtitle}>
+              Add items above to start building your shopping list
+            </Text>
+          </View>
         )}
       </View>
     </ScrollView>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: "#F0FFF4",
   },
   content: {
-    maxWidth: 800,
-    alignSelf: 'center',
-    width: '100%',
-    padding: spacing[5], // 20px - matching web padding
-    backgroundColor: COLORS.containerBg,
-    borderRadius: radii.lg, // 8px
-    margin: spacing[4], // 16px margin around container
+    padding: 20,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing[6], // 24px
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 20,
   },
   headerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
+    gap: 12,
   },
   listTitle: {
-    fontSize: typography.fontSizes['2xl'], // 24px
-    fontWeight: typography.fontWeights.bold,
-    marginLeft: spacing[3], // 12px
-    color: COLORS.darkGray,
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#22543D",
+  },
+  progressLabel: {
+    fontSize: 12,
+    color: "#38A169",
+    fontStyle: "italic",
   },
   headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  totalBadge: {
+    backgroundColor: "#C6F6D5",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   totalAmount: {
-    fontSize: typography.fontSizes.xl, // 20px
-    fontWeight: typography.fontWeights.bold,
-    marginRight: spacing[3], // 12px
-    color: COLORS.darkGray,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#22543D",
   },
   copyButton: {
-    padding: spacing[2], // 8px
+    padding: 8,
   },
   addItemSection: {
-    backgroundColor: COLORS.white,
-    padding: spacing[4], // 16px
-    borderRadius: radii.xl, // 12px
-    marginBottom: spacing[6], // 24px
-    shadowColor: '#000',
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    gap: 12,
   },
   addItemInput: {
-    paddingVertical: spacing[3], // 12px
-    paddingHorizontal: spacing[4], // 16px
-    fontSize: typography.fontSizes.md, // 16px
-    marginBottom: spacing[3], // 12px
-    backgroundColor: COLORS.inputBg,
-    borderRadius: radii.md, // 6px
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    color: COLORS.darkGray,
+    borderColor: "#E2E8F0",
+    color: "#2D3748",
   },
   categorySelector: {
-    flexDirection: 'row',
-    marginBottom: spacing[3], // 12px
-    gap: spacing[2], // 8px
+    flexDirection: "row",
+    gap: 8,
   },
   categoryOption: {
-    paddingHorizontal: spacing[3], // 12px
-    paddingVertical: spacing[2], // 8px
-    borderRadius: radii.full, // 20px
-    backgroundColor: COLORS.lightGray,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#E2E8F0",
   },
   selectedCategory: {
-    backgroundColor: COLORS.badgeGreen,
+    backgroundColor: "#C6F6D5",
   },
   categoryText: {
-    fontSize: typography.fontSizes.sm, // 14px
-    color: COLORS.darkGray,
+    fontSize: 13,
+    color: "#4A5568",
   },
   selectedCategoryText: {
-    color: COLORS.badgeText,
-    fontWeight: typography.fontWeights.semibold,
+    color: "#22543D",
+    fontWeight: "600",
   },
   addButton: {
-    backgroundColor: COLORS.green,
-    paddingVertical: spacing[3], // 12px
-    paddingHorizontal: spacing[8], // 32px
-    borderRadius: radii.md, // 6px
-    alignItems: 'center',
+    backgroundColor: "#38A169",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
   },
   addButtonText: {
-    color: COLORS.white,
-    fontWeight: typography.fontWeights.bold,
-    fontSize: typography.fontSizes.md, // 16px
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    fontSize: 16,
   },
   categoriesList: {
-    gap: spacing[2], // 8px
+    gap: 8,
   },
   categoryGroup: {
-    marginBottom: spacing[2], // 8px
+    marginBottom: 8,
   },
   categoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing[4], // 16px
-    backgroundColor: COLORS.white,
-    borderRadius: radii.xl, // 12px
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#C6F6D5",
+    borderRadius: 8,
   },
   categoryInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   categoryName: {
-    fontWeight: typography.fontWeights.semibold,
-    marginLeft: spacing[3], // 12px
-    fontSize: typography.fontSizes.lg, // 18px
-    color: COLORS.darkGray,
+    fontWeight: "bold",
+    fontSize: 16,
+    color: "#22543D",
   },
   categoryMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   categoryCount: {
-    fontSize: typography.fontSizes.sm, // 14px
-    marginRight: spacing[2], // 8px
-    color: COLORS.mediumGray,
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#22543D",
   },
   categoryItems: {
-    marginTop: spacing[2], // 8px
-    gap: spacing[2], // 8px
+    marginTop: 4,
+    gap: 4,
   },
   itemContainer: {
-    backgroundColor: COLORS.white,
-    borderRadius: radii.xl, // 12px
-    padding: spacing[4], // 16px
-    marginBottom: spacing[2], // 8px
-    shadowColor: '#000',
+    backgroundColor: "#FFFFFF",
+    borderRadius: 8,
+    padding: 12,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
   itemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   checkbox: {
-    padding: spacing[1], // 4px
-    marginRight: spacing[3], // 12px
+    marginRight: 12,
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: "#CBD5E0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: {
+    backgroundColor: "#38A169",
+    borderColor: "#38A169",
+  },
+  checkboxMark: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
   },
   itemContent: {
     flex: 1,
   },
   itemText: {
-    fontSize: typography.fontSizes.md, // 16px
-    fontWeight: typography.fontWeights.medium,
-    color: COLORS.darkGray,
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#2D3748",
   },
   itemNotes: {
-    fontSize: typography.fontSizes.xs, // 12px
-    color: COLORS.mediumGray,
-    marginTop: spacing[1], // 4px
+    fontSize: 12,
+    color: "#718096",
+    marginTop: 2,
   },
   strikethrough: {
-    textDecorationLine: 'line-through',
+    textDecorationLine: "line-through",
   },
   itemActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1], // 4px
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   itemAmount: {
-    fontSize: typography.fontSizes.md, // 16px
-    marginRight: spacing[2], // 8px
-    fontWeight: typography.fontWeights.semibold,
-    color: COLORS.darkGray,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2D3748",
+    marginRight: 4,
   },
   expandButton: {
-    padding: spacing[1], // 4px
+    padding: 4,
   },
   deleteButton: {
-    padding: spacing[1], // 4px
+    padding: 4,
   },
   expandedContent: {
-    marginTop: spacing[3], // 12px
-    padding: spacing[4], // 16px
-    backgroundColor: chakraColors.gray[50],
-    borderRadius: radii.md, // 6px
-    gap: spacing[3], // 12px
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: "#F7FAFC",
+    borderRadius: 8,
+    gap: 12,
   },
   expandedRow: {
-    flexDirection: 'row',
-    gap: spacing[3], // 12px
+    gap: 8,
   },
   expandedField: {
     flex: 1,
   },
   fieldLabel: {
-    fontSize: typography.fontSizes.sm, // 14px
-    fontWeight: typography.fontWeights.semibold,
-    marginBottom: spacing[2], // 8px
-    color: COLORS.darkGray,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 6,
+    color: "#4A5568",
   },
   priceInput: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: radii.sm, // 4px
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    paddingHorizontal: spacing[3], // 12px
-    paddingVertical: spacing[2], // 8px
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   dollarSign: {
-    fontSize: typography.fontSizes.md, // 16px
-    marginRight: spacing[1], // 4px
-    color: COLORS.darkGray,
+    fontSize: 16,
+    marginRight: 4,
+    color: "#2D3748",
   },
   amountInput: {
     flex: 1,
-    fontSize: typography.fontSizes.md, // 16px
-    color: COLORS.darkGray,
+    fontSize: 16,
+    color: "#2D3748",
   },
   notesInput: {
-    backgroundColor: COLORS.white,
-    borderRadius: radii.sm, // 4px
+    backgroundColor: "#FFFFFF",
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: COLORS.lightGray,
-    padding: spacing[3], // 12px
-    fontSize: typography.fontSizes.sm, // 14px
-    textAlignVertical: 'top',
-    color: COLORS.darkGray,
+    borderColor: "#E2E8F0",
+    padding: 12,
+    fontSize: 14,
+    textAlignVertical: "top",
+    color: "#2D3748",
+    minHeight: 60,
   },
-  emptyMessage: {
-    fontSize: typography.fontSizes.md, // 16px
-    color: COLORS.mediumGray,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: spacing[8], // 32px
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#22543D",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#38A169",
+    textAlign: "center",
+    maxWidth: 280,
   },
 });
-
-export default ShoppingListv2;

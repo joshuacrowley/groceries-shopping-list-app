@@ -5,89 +5,68 @@ test_command: "cd client && npx expo lint"
 
 # Task: Port All Templates to React Native
 
-Port every template from `tiny-talking-todos-templates-for-react-native/templates/` to `client/templates/` as a React Native component. For the 6 that already exist, refresh them from the latest web source. For the 25 new ones, create them from scratch.
+Port each web template from `tiny-talking-todos-templates-for-react-native/templates/` to `client/templates/` as a React Native component, then wire it into the switch statement in `client/app/(index)/list/[listId]/index.tsx`.
 
-## Before You Start
+## CRITICAL: Context Management
 
-Read these files for context (in this order):
+DO NOT read these files (they are too large and will waste your context):
+- `tiny-talking-todos-templates-for-react-native/catalogue.json` (88KB) — use `grep` instead
+- `tiny-talking-todos-templates-for-react-native/PORTING-GUIDE.md` — already summarized below
+- `tiny-talking-todos-templates-for-react-native/best-practices.md` — already summarized below
+- `client/templates/RecipeCard.tsx` (68KB) — pattern is shown below
 
-1. `tiny-talking-todos-templates-for-react-native/PORTING-GUIDE.md` — full porting instructions, dependency mapping, component mapping
-2. `tiny-talking-todos-templates-for-react-native/best-practices.md` — TinyBase performance patterns
-3. `tiny-talking-todos-templates-for-react-native/hooks/useTodos.ts` — shared hooks reference (TodoItem interface, useTodoActions, useTodos)
-4. `client/templates/RecipeCard.tsx` — example of a well-ported template (use as your reference for style/patterns)
-5. `client/app/(index)/list/[listId]/index.tsx` — the switch statement where templates are wired up
+For each template, ONLY read the specific web source file you're porting. Use `grep -A 10 '"template": "TemplateName"' tiny-talking-todos-templates-for-react-native/catalogue.json` to get metadata.
 
-## How to Port Each Template
-
-For each template:
-
-1. **Read the web source**: `tiny-talking-todos-templates-for-react-native/templates/{Template}.tsx`
-2. **Read the catalogue entry** in `tiny-talking-todos-templates-for-react-native/catalogue.json` for metadata (icon, color, type, systemPrompt)
-3. **Convert to React Native** following these rules:
-   - Use `react-native` core components: `View`, `Text`, `Pressable`, `TextInput`, `ScrollView`, `FlatList`, `Alert`, `Modal`, `StyleSheet`
-   - Use `phosphor-react-native` for icons (same icon names as web)
-   - Use TinyBase hooks from `tinybase/ui-react`: `useStore`, `useLocalRowIds`, `useRow`, `useCell`, `useSetRowCallback`, `useDelRowCallback`, `useAddRowCallback`, `useTable`, `useAddRowCallback`
-   - Wrap individual item components in `React.memo()`
-   - Use `useLocalRowIds("todoList", listId)` in parent components (NOT `useTable`)
-   - Use `useMemo` with imperative `store.getCell()` for category grouping
-   - Replace Chakra UI components with React Native equivalents (see PORTING-GUIDE.md)
-   - Replace framer-motion with simple React Native `Animated` or just static rendering (skip complex animations)
-   - Replace `use-sound` with nothing (skip sound effects for now)
-   - Replace CSS transitions with React Native opacity/style changes
-   - Use `StyleSheet.create()` for all styles at the bottom of the file
-   - Export the component as `export default function TemplateName({ listId }: { listId: string })`
-4. **Write the file** to `client/templates/{Template}.tsx`
-5. **Wire it up**: Add an `import` and a `case` to the switch statement in `client/app/(index)/list/[listId]/index.tsx`
-6. **Commit**: `git add -A && git commit -m 'ralph: port {Template} to React Native'` (or `ralph: refresh {Template}` for existing ones)
-
-## Key Pattern Reference
+## Porting Pattern (use this — do NOT read other files for reference)
 
 ```typescript
 import React, { useState, useCallback, useMemo, memo } from "react";
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Alert, Modal } from "react-native";
 import { useStore, useLocalRowIds, useRow, useSetRowCallback, useDelRowCallback, useAddRowCallback } from "tinybase/ui-react";
-import { SomeIcon } from "phosphor-react-native";
+// Import specific icons from phosphor-react-native (same names as web)
 
-// Memoized individual item component
+// Memoized individual item component — subscribes to its own data only
 const TaskItem = memo(({ id }: { id: string }) => {
   const taskData = useRow("todos", id);
   const store = useStore();
-  const updateTask = useSetRowCallback(
-    "todos", id,
-    (updates: any) => ({ ...taskData, ...updates }),
-    [taskData]
-  );
   const deleteTask = useDelRowCallback("todos", id);
 
   if (!taskData) return null;
 
+  const handleToggle = () => store?.setCell("todos", id, "done", !taskData.done);
+  const handleDelete = () => {
+    Alert.alert("Delete", "Delete this item?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: deleteTask },
+    ]);
+  };
+
   return (
     <View style={styles.item}>
-      <Pressable onPress={() => store?.setCell("todos", id, "done", !taskData.done)}>
-        {/* checkbox */}
+      <Pressable onPress={handleToggle}>
+        <View style={[styles.checkbox, taskData.done && styles.checkboxDone]} />
       </Pressable>
-      <Text>{taskData.text}</Text>
-      <Pressable onPress={() => Alert.alert("Delete", "Delete this item?", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: deleteTask },
-      ])}>
-        {/* delete button */}
+      <Text style={[styles.itemText, taskData.done && styles.itemTextDone]}>{taskData.text}</Text>
+      <Pressable onPress={handleDelete}>
+        <Text style={styles.deleteBtn}>×</Text>
       </Pressable>
     </View>
   );
 });
 
-// Parent component
+// Parent component — uses useLocalRowIds (NOT useTable)
 export default function TemplateName({ listId }: { listId: string }) {
   const todoIds = useLocalRowIds("todoList", listId) || [];
   const store = useStore();
+  const [newText, setNewText] = useState("");
+
   const addTodo = useAddRowCallback(
     "todos",
     (data: any) => ({ ...data, list: listId, done: false }),
     [listId]
   );
 
-  // Category grouping example
+  // Category grouping (if needed)
   const grouped = useMemo(() => {
     const groups: Record<string, string[]> = {};
     todoIds.forEach(id => {
@@ -100,64 +79,78 @@ export default function TemplateName({ listId }: { listId: string }) {
 
   return (
     <ScrollView style={styles.container}>
-      {/* Render items */}
       {todoIds.map(id => <TaskItem key={id} id={id} />)}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  item: { /* ... */ },
+  container: { flex: 1, backgroundColor: "#F7FAFC" },
+  item: { flexDirection: "row", alignItems: "center", padding: 12, borderBottomWidth: 1, borderBottomColor: "#E2E8F0" },
+  // ... more styles
 });
 ```
 
+## Key Conversion Rules
+
+- `<Box>` → `<View>`, `<Flex>` → `<View style={{flexDirection:'row'}}>`, `<VStack>` → `<View>`, `<HStack>` → `<View style={{flexDirection:'row'}}>`
+- `<Input>` → `<TextInput>`, `<Button>` → `<Pressable>`, `<IconButton>` → `<Pressable>` wrapping icon
+- Chakra spacing: `p={4}` = `padding: 16`, `1=4px, 2=8px, 3=12px, 4=16px, 6=24px, 8=32px`
+- Chakra colors: `gray.50=#F7FAFC, gray.100=#EDF2F7, gray.200=#E2E8F0, gray.500=#718096, gray.700=#2D3748`
+- `blue.500=#3182CE, green.500=#38A169, red.500=#E53E3E, purple.500=#805AD5, orange.400=#ED8936, pink.400=#ED64A6`
+- Skip `framer-motion` animations — use simple style changes
+- Skip `use-sound` — remove sound effects
+- Skip `react-confetti` — remove confetti
+- Use `StyleSheet.create()` for all styles
+- `export default function TemplateName({ listId }: { listId: string })`
+
+## How to Port Each Template
+
+1. Read ONLY `tiny-talking-todos-templates-for-react-native/templates/{Template}.tsx`
+2. Use `grep` to get catalogue metadata (do NOT read the full file)
+3. Convert to React Native using the pattern above
+4. Write to `client/templates/{Template}.tsx`
+5. Add import + case to switch in `client/app/(index)/list/[listId]/index.tsx`
+6. Mark checkbox `[x]` in this file
+7. Commit: `git add -A && git commit -m 'ralph: port {Template} to React Native'`
+
+Work through templates one at a time. After each commit, move to the next unchecked item.
+
 ## Success Criteria
 
-### Refresh existing templates (re-port from latest web source)
+### Refresh existing (overwrite with fresh port from web source)
 
-1. [ ] Refresh `ShoppingListv2` — read web source, re-port to React Native, commit
-2. [ ] Refresh `Today` — read web source, re-port to React Native, commit
-3. [ ] Refresh `WeeklyMealPlanner` — read web source, re-port to React Native, commit
-4. [ ] Refresh `WeekendPlanner` — read web source, re-port to React Native, commit
-5. [ ] Refresh `Recipes` — read web source, re-port to React Native, commit
-6. [ ] Refresh `RecipeCard` — read web source, re-port to React Native, commit
+1. [ ] `ShoppingListv2`
+2. [ ] `Today`
+3. [ ] `WeeklyMealPlanner`
+4. [ ] `WeekendPlanner`
+5. [ ] `Recipes`
+6. [ ] `RecipeCard`
 
 ### Port new templates
 
-7. [ ] Port `AfterSchoolRoutine` — read web source, port to React Native, wire up switch, commit
-8. [ ] Port `Beach` — read web source, port to React Native, wire up switch, commit
-9. [ ] Port `BirthdayTracker` — read web source, port to React Native, wire up switch, commit
-10. [ ] Port `CarMaintenance` — read web source, port to React Native, wire up switch, commit
-11. [ ] Port `ChildTemperatureTracker` — read web source, port to React Native, wire up switch, commit
-12. [ ] Port `Clothes` — read web source, port to React Native, wire up switch, commit
-13. [ ] Port `DateNightList` — read web source, port to React Native, wire up switch, commit
-14. [ ] Port `Expiry` — read web source, port to React Native, wire up switch, commit
-15. [ ] Port `GiveAwayList` — read web source, port to React Native, wire up switch, commit
-16. [ ] Port `HomeMaintenanceList` — read web source, port to React Native, wire up switch, commit
-17. [ ] Port `KidsPartyFoodList` — read web source, port to React Native, wire up switch, commit
-18. [ ] Port `LaundryTracker` — read web source, port to React Native, wire up switch, commit
-19. [ ] Port `Leftovers` — read web source, port to React Native, wire up switch, commit
-20. [ ] Port `LunchPlanner` — read web source, port to React Native, wire up switch, commit
-21. [ ] Port `MentalLoad` — read web source, port to React Native, wire up switch, commit
-22. [ ] Port `MorningRoutine` — read web source, port to React Native, wire up switch, commit
-23. [ ] Port `OffloadList` — read web source, port to React Native, wire up switch, commit
-24. [ ] Port `ParkLife` — read web source, port to React Native, wire up switch, commit
-25. [ ] Port `PartyBags` — read web source, port to React Native, wire up switch, commit
-26. [ ] Port `PartyGuestList` — read web source, port to React Native, wire up switch, commit
-27. [ ] Port `SchoolCalendarTodo` — read web source, port to React Native, wire up switch, commit
-28. [ ] Port `SchoolHolidayPlanner` — read web source, port to React Native, wire up switch, commit
-29. [ ] Port `SchoolPickupRoster` — read web source, port to React Native, wire up switch, commit
-30. [ ] Port `SubscriptionTracker` — read web source, port to React Native, wire up switch, commit
-31. [ ] Port `TidyUp` — read web source, port to React Native, wire up switch, commit
-
-## Important Notes
-
-- The `OffloadList` template is the most complex — it powers ~10 different published lists. Port it as a single component that adapts based on list metadata.
-- Skip sound effects (`use-sound`) — just remove them.
-- Skip complex framer-motion animations — use simple opacity/style changes or static rendering.
-- For date/time pickers, use a simple `TextInput` for now (the app can add native pickers later).
-- If a Phosphor icon doesn't exist in `phosphor-react-native`, use the closest available alternative.
-- Always use `StyleSheet.create()` for styles — never inline style objects.
-- Each template should be fully self-contained in a single file.
-- Remember to update `.ralph/progress.md` after completing templates.
+7. [ ] `AfterSchoolRoutine`
+8. [ ] `Beach`
+9. [ ] `BirthdayTracker`
+10. [ ] `CarMaintenance`
+11. [ ] `ChildTemperatureTracker`
+12. [ ] `Clothes`
+13. [ ] `DateNightList`
+14. [ ] `Expiry`
+15. [ ] `GiveAwayList`
+16. [ ] `HomeMaintenanceList`
+17. [ ] `KidsPartyFoodList`
+18. [ ] `LaundryTracker`
+19. [ ] `Leftovers`
+20. [ ] `LunchPlanner`
+21. [ ] `MentalLoad`
+22. [ ] `MorningRoutine`
+23. [ ] `OffloadList`
+24. [ ] `ParkLife`
+25. [ ] `PartyBags`
+26. [ ] `PartyGuestList`
+27. [ ] `SchoolCalendarTodo`
+28. [ ] `SchoolHolidayPlanner`
+29. [ ] `SchoolPickupRoster`
+30. [ ] `SubscriptionTracker`
+31. [ ] `TidyUp`

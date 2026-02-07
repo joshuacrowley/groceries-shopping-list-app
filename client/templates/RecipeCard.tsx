@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, memo } from "react";
 import {
   View,
   Text,
@@ -16,7 +16,6 @@ import {
   useSetRowCallback,
   useDelRowCallback,
   useAddRowCallback,
-  useTable,
 } from "tinybase/ui-react";
 import {
   Plus,

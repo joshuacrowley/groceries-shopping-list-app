@@ -4,17 +4,15 @@
 
 ## Summary
 
-- Iterations completed: 0
-- Current status: Initialized
+- Iterations completed: 1 (failed — context exhausted reading reference docs)
+- Templates ported: 0 of 31
+- Current status: Restarting with optimized RALPH_TASK.md and guardrails
 
-## How This Works
+## Lessons from Iteration 1
 
-Progress is tracked in THIS FILE, not in LLM context.
-When context is rotated (fresh agent), the new agent reads this file.
-This is how Ralph maintains continuity across iterations.
+- DO NOT read catalogue.json, PORTING-GUIDE.md, best-practices.md, or existing templates for reference
+- All context is in RALPH_TASK.md — just read the web source and write the RN version
+- Use grep for catalogue metadata
 
 ## Session History
 
-
-### 2026-02-07 16:09:44
-**Session 1 started** (model: claude-4.6-opus)

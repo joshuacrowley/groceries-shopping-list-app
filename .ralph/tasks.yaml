@@ -1,0 +1,226 @@
+# Ralph Task Cache
+# Auto-generated from RALPH_TASK.md
+# DO NOT EDIT - regenerated on task file change
+
+source_file: RALPH_TASK.md
+source_mtime: 1770440962
+generated_at: 2026-02-07T05:10:19Z
+
+tasks:
+  - id: "line_119"
+    line_number: 119
+    status: pending
+    parallel_group: 999999
+    description: Refresh `ShoppingListv2` — read web source, re-port to React Native, commit
+    indent_level: 0
+    raw_marker: 1.
+  - id: "line_120"
+    line_number: 120
+    status: pending
+    parallel_group: 999999
+    description: Refresh `Today` — read web source, re-port to React Native, commit
+    indent_level: 0
+    raw_marker: 2.
+  - id: "line_121"
+    line_number: 121
+    status: pending
+    parallel_group: 999999
+    description: Refresh `WeeklyMealPlanner` — read web source, re-port to React Native, commit
+    indent_level: 0
+    raw_marker: 3.
+  - id: "line_122"
+    line_number: 122
+    status: pending
+    parallel_group: 999999
+    description: Refresh `WeekendPlanner` — read web source, re-port to React Native, commit
+    indent_level: 0
+    raw_marker: 4.
+  - id: "line_123"
+    line_number: 123
+    status: pending
+    parallel_group: 999999
+    description: Refresh `Recipes` — read web source, re-port to React Native, commit
+    indent_level: 0
+    raw_marker: 5.
+  - id: "line_124"
+    line_number: 124
+    status: pending
+    parallel_group: 999999
+    description: Refresh `RecipeCard` — read web source, re-port to React Native, commit
+    indent_level: 0
+    raw_marker: 6.
+  - id: "line_128"
+    line_number: 128
+    status: pending
+    parallel_group: 999999
+    description: Port `AfterSchoolRoutine` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 7.
+  - id: "line_129"
+    line_number: 129
+    status: pending
+    parallel_group: 999999
+    description: Port `Beach` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 8.
+  - id: "line_130"
+    line_number: 130
+    status: pending
+    parallel_group: 999999
+    description: Port `BirthdayTracker` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 9.
+  - id: "line_131"
+    line_number: 131
+    status: pending
+    parallel_group: 999999
+    description: Port `CarMaintenance` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 10.
+  - id: "line_132"
+    line_number: 132
+    status: pending
+    parallel_group: 999999
+    description: Port `ChildTemperatureTracker` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 11.
+  - id: "line_133"
+    line_number: 133
+    status: pending
+    parallel_group: 999999
+    description: Port `Clothes` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 12.
+  - id: "line_134"
+    line_number: 134
+    status: pending
+    parallel_group: 999999
+    description: Port `DateNightList` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 13.
+  - id: "line_135"
+    line_number: 135
+    status: pending
+    parallel_group: 999999
+    description: Port `Expiry` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 14.
+  - id: "line_136"
+    line_number: 136
+    status: pending
+    parallel_group: 999999
+    description: Port `GiveAwayList` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 15.
+  - id: "line_137"
+    line_number: 137
+    status: pending
+    parallel_group: 999999
+    description: Port `HomeMaintenanceList` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 16.
+  - id: "line_138"
+    line_number: 138
+    status: pending
+    parallel_group: 999999
+    description: Port `KidsPartyFoodList` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 17.
+  - id: "line_139"
+    line_number: 139
+    status: pending
+    parallel_group: 999999
+    description: Port `LaundryTracker` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 18.
+  - id: "line_140"
+    line_number: 140
+    status: pending
+    parallel_group: 999999
+    description: Port `Leftovers` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 19.
+  - id: "line_141"
+    line_number: 141
+    status: pending
+    parallel_group: 999999
+    description: Port `LunchPlanner` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 20.
+  - id: "line_142"
+    line_number: 142
+    status: pending
+    parallel_group: 999999
+    description: Port `MentalLoad` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 21.
+  - id: "line_143"
+    line_number: 143
+    status: pending
+    parallel_group: 999999
+    description: Port `MorningRoutine` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 22.
+  - id: "line_144"
+    line_number: 144
+    status: pending
+    parallel_group: 999999
+    description: Port `OffloadList` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 23.
+  - id: "line_145"
+    line_number: 145
+    status: pending
+    parallel_group: 999999
+    description: Port `ParkLife` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 24.
+  - id: "line_146"
+    line_number: 146
+    status: pending
+    parallel_group: 999999
+    description: Port `PartyBags` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 25.
+  - id: "line_147"
+    line_number: 147
+    status: pending
+    parallel_group: 999999
+    description: Port `PartyGuestList` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 26.
+  - id: "line_148"
+    line_number: 148
+    status: pending
+    parallel_group: 999999
+    description: Port `SchoolCalendarTodo` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 27.
+  - id: "line_149"
+    line_number: 149
+    status: pending
+    parallel_group: 999999
+    description: Port `SchoolHolidayPlanner` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 28.
+  - id: "line_150"
+    line_number: 150
+    status: pending
+    parallel_group: 999999
+    description: Port `SchoolPickupRoster` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 29.
+  - id: "line_151"
+    line_number: 151
+    status: pending
+    parallel_group: 999999
+    description: Port `SubscriptionTracker` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 30.
+  - id: "line_152"
+    line_number: 152
+    status: pending
+    parallel_group: 999999
+    description: Port `TidyUp` — read web source, port to React Native, wire up switch, commit
+    indent_level: 0
+    raw_marker: 31.
