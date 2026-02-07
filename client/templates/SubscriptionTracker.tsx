@@ -1,9 +1,22 @@
 import React, { useState, useCallback, useMemo, memo } from "react";
-import { View, Text, TextInput, Pressable, ScrollView, Alert, StyleSheet } from "react-native";
-import { useStore, useLocalRowIds, useRow, useDelRowCallback, useAddRowCallback } from "tinybase/ui-react";
-import { Trash, CreditCard, CaretDown, CaretRight } from "phosphor-react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  TextInput,
+  Alert,
+} from "react-native";
+import {
+  useStore,
+  useLocalRowIds,
+  useRow,
+  useDelRowCallback,
+  useAddRowCallback,
+} from "tinybase/ui-react";
+import { Trash, CaretDown, CaretUp, CreditCard } from "phosphor-react-native";
 
-const TYPES = ["Monthly", "Yearly", "Weekly", "Daily"];
 const FREQUENCIES: Record<string, number> = {
   Monthly: 12,
   Yearly: 1,
@@ -12,201 +25,145 @@ const FREQUENCIES: Record<string, number> = {
 };
 
 const SubscriptionItem = memo(({ id }: { id: string }) => {
+  const [expanded, setExpanded] = useState(false);
   const itemData = useRow("todos", id);
   const store = useStore();
   const deleteItem = useDelRowCallback("todos", id);
-  const [expanded, setExpanded] = useState(false);
 
   if (!itemData) return null;
 
-  const typeIndex = parseInt(String(itemData.type || "1"), 10) - 1;
-  const typeName = TYPES[typeIndex] || "Monthly";
+  const isDone = Boolean(itemData.done);
   const amount = Number(itemData.amount || 0);
+  const freq = String(itemData.category || "Monthly");
+  const annualCost = amount * (FREQUENCIES[freq] || 12);
+
+  const handleToggle = () => store?.setCell("todos", id, "done", !isDone);
+  const handleDelete = () => {
+    Alert.alert("Delete", "Remove this subscription?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: deleteItem },
+    ]);
+  };
 
   return (
-    <View style={styles.item}>
-      <Pressable onPress={() => setExpanded(!expanded)} style={styles.itemHeader}>
-        <View style={styles.itemLeft}>
-          <Text style={styles.itemText}>{String(itemData.text || "")}</Text>
-          <View style={styles.typeBadge}>
-            <Text style={styles.typeBadgeText}>{typeName}</Text>
+    <View style={[styles.itemCard, isDone && styles.itemDone]}>
+      <View style={styles.itemRow}>
+        <Pressable onPress={handleToggle} style={styles.checkbox}>
+          <View style={[styles.checkboxInner, isDone && styles.checkboxChecked]}>
+            {isDone && <Text style={styles.checkmark}>✓</Text>}
           </View>
+        </Pressable>
+        <Text style={styles.itemEmoji}>{String(itemData.emoji || "💳")}</Text>
+        <View style={styles.itemInfo}>
+          <Text style={[styles.itemText, isDone && styles.itemTextDone]} numberOfLines={1}>{String(itemData.text || "")}</Text>
+          <Text style={styles.itemFreq}>{freq} · ${amount.toFixed(2)}</Text>
         </View>
-        <View style={styles.itemRight}>
-          <Text style={styles.amountText}>${amount.toFixed(2)}</Text>
-          {expanded ? (
-            <CaretDown size={16} color="#718096" />
-          ) : (
-            <CaretRight size={16} color="#718096" />
-          )}
-        </View>
-      </Pressable>
-
+        <Text style={styles.annualCost}>${annualCost.toFixed(0)}/yr</Text>
+        <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
+          {expanded ? <CaretUp size={16} color="#3182CE" /> : <CaretDown size={16} color="#3182CE" />}
+        </Pressable>
+        <Pressable onPress={handleDelete} style={styles.iconBtn}>
+          <Trash size={16} color="#E53E3E" />
+        </Pressable>
+      </View>
       {expanded && (
-        <View style={styles.expandedSection}>
-          {itemData.notes ? (
-            <Text style={styles.notesText}>{String(itemData.notes)}</Text>
-          ) : null}
-          <View style={styles.expandedRow}>
-            <Text style={styles.expandedLabel}>Annual cost:</Text>
-            <Text style={styles.expandedValue}>
-              ${(amount * (FREQUENCIES[typeName] || 12)).toFixed(2)}
-            </Text>
+        <View style={styles.detailsSection}>
+          <Text style={styles.detailLabel}>Amount:</Text>
+          <TextInput style={styles.detailInput} value={String(amount)}
+            onChangeText={(t) => store?.setCell("todos", id, "amount", parseFloat(t) || 0)}
+            keyboardType="decimal-pad" />
+          <Text style={styles.detailLabel}>Frequency:</Text>
+          <View style={styles.chipRow}>
+            {Object.keys(FREQUENCIES).map((f) => (
+              <Pressable key={f} onPress={() => store?.setCell("todos", id, "category", f)}
+                style={[styles.chip, freq === f && styles.chipActive]}>
+                <Text style={[styles.chipText, freq === f && styles.chipTextActive]}>{f}</Text>
+              </Pressable>
+            ))}
           </View>
-          <Pressable
-            onPress={() =>
-              Alert.alert("Delete", "Remove this subscription?", [
-                { text: "Cancel", style: "cancel" },
-                { text: "Delete", style: "destructive", onPress: deleteItem },
-              ])
-            }
-            style={styles.deleteRow}
-          >
-            <Trash size={16} color="#E53E3E" weight="bold" />
-            <Text style={styles.deleteText}>Delete</Text>
-          </Pressable>
+          <Text style={styles.detailLabel}>Renewal Date:</Text>
+          <TextInput style={styles.detailInput} value={String(itemData.date || "")}
+            onChangeText={(t) => store?.setCell("todos", id, "date", t)} placeholder="YYYY-MM-DD" placeholderTextColor="#A0AEC0" />
+          <Text style={styles.detailLabel}>Notes:</Text>
+          <TextInput style={[styles.detailInput, { minHeight: 50, textAlignVertical: "top" }]}
+            value={String(itemData.notes || "")} onChangeText={(t) => store?.setCell("todos", id, "notes", t)}
+            placeholder="Account details..." placeholderTextColor="#A0AEC0" multiline />
         </View>
       )}
     </View>
   );
 });
+SubscriptionItem.displayName = "SubscriptionItem";
 
 export default function SubscriptionTracker({ listId }: { listId: string }) {
-  const [newName, setNewName] = useState("");
-  const [newAmount, setNewAmount] = useState("");
-  const [newType, setNewType] = useState("1"); // Monthly
+  const [newSub, setNewSub] = useState("");
   const store = useStore();
   const todoIds = useLocalRowIds("todoList", listId) || [];
   const listData = useRow("lists", listId);
 
-  const totalMonthly = useMemo(() => {
-    let total = 0;
-    todoIds.forEach((id) => {
-      const item = store?.getRow("todos", id);
-      if (!item) return;
-      const typeIdx = parseInt(String(item.type || "1"), 10) - 1;
-      const freq = FREQUENCIES[TYPES[typeIdx] || "Monthly"] || 12;
-      total += (Number(item.amount || 0) * freq) / 12;
-    });
-    return total;
-  }, [todoIds, store]);
-
-  const addItem = useAddRowCallback(
+  const addSub = useAddRowCallback(
     "todos",
-    (data: any) => ({
-      text: data.text?.trim() || "",
-      type: data.type || "1",
-      amount: data.amount || 0,
-      notes: "",
+    (text: string) => ({
+      text: text.trim(),
+      amount: 0,
+      category: "Monthly",
       emoji: "💳",
-      category: "",
-      done: false,
       list: listId,
+      done: false,
+      date: "",
+      notes: "",
     }),
-    [listId]
+    [listId],
+    undefined,
+    (rowId) => { if (rowId) setNewSub(""); }
   );
 
   const handleAdd = useCallback(() => {
-    if (newName.trim()) {
-      addItem({
-        text: newName.trim(),
-        type: newType,
-        amount: parseFloat(newAmount) || 0,
-      });
-      setNewName("");
-      setNewAmount("");
-    }
-  }, [newName, newAmount, newType, addItem]);
+    if (newSub.trim()) addSub(newSub);
+  }, [addSub, newSub]);
+
+  const totalMonthly = useMemo(() => {
+    return todoIds.reduce((sum, id) => {
+      if (store?.getCell("todos", id, "done")) return sum;
+      const amount = Number(store?.getCell("todos", id, "amount") || 0);
+      const freq = String(store?.getCell("todos", id, "category") || "Monthly");
+      const monthly = (amount * (FREQUENCIES[freq] || 12)) / 12;
+      return sum + monthly;
+    }, 0);
+  }, [todoIds, store]);
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.header}>
+        <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <CreditCard size={28} color="#805AD5" weight="fill" />
+            <CreditCard size={26} color="#3182CE" weight="fill" />
             <View>
-              <Text style={styles.title}>{String(listData?.name || "Subscription Tracker")}</Text>
-              <Text style={styles.subtitle}>
-                {todoIds.length === 0
-                  ? "Track your subscriptions! 💳"
-                  : `${todoIds.length} subscription${todoIds.length === 1 ? "" : "s"} tracked`}
-              </Text>
+              <Text style={styles.listTitle}>{String(listData?.name || "Subscriptions")}</Text>
+              <Text style={styles.progressLabel}>Track your recurring costs 💸</Text>
             </View>
           </View>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{todoIds.length}</Text>
+          <View style={styles.totalBadge}>
+            <Text style={styles.totalBadgeText}>${totalMonthly.toFixed(0)}/mo</Text>
           </View>
         </View>
 
-        {/* Total summary */}
-        {todoIds.length > 0 && (
-          <View style={styles.totalCard}>
-            <Text style={styles.totalLabel}>Monthly Total</Text>
-            <Text style={styles.totalAmount}>${totalMonthly.toFixed(2)}</Text>
-            <Text style={styles.totalSub}>
-              ${(totalMonthly * 12).toFixed(2)}/year
-            </Text>
-          </View>
-        )}
-
-        {/* Add form */}
-        <View style={styles.addSection}>
-          <TextInput
-            style={styles.addInput}
-            placeholder="Subscription name"
-            value={newName}
-            onChangeText={setNewName}
-            placeholderTextColor="#A0AEC0"
-          />
-          <View style={styles.addRow}>
-            <TextInput
-              style={[styles.addInput, { flex: 1 }]}
-              placeholder="Amount ($)"
-              value={newAmount}
-              onChangeText={setNewAmount}
-              keyboardType="decimal-pad"
-              placeholderTextColor="#A0AEC0"
-            />
-            <View style={styles.typeSelector}>
-              {TYPES.map((type, idx) => (
-                <Pressable
-                  key={type}
-                  onPress={() => setNewType(String(idx + 1))}
-                  style={[
-                    styles.typeOption,
-                    newType === String(idx + 1) && styles.typeOptionActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.typeOptionText,
-                      newType === String(idx + 1) && styles.typeOptionTextActive,
-                    ]}
-                  >
-                    {type.charAt(0)}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-          <Pressable onPress={handleAdd} style={styles.addBtn}>
-            <Text style={styles.addBtnText}>Add Subscription</Text>
+        <View style={styles.addRow}>
+          <TextInput style={styles.addInput} value={newSub} onChangeText={setNewSub}
+            placeholder="Add subscription..." placeholderTextColor="#A0AEC0"
+            onSubmitEditing={handleAdd} returnKeyType="done" />
+          <Pressable onPress={handleAdd} style={styles.addButton}>
+            <Text style={styles.addButtonText}>Add</Text>
           </Pressable>
         </View>
 
-        {/* Items */}
-        {todoIds.map((id) => (
-          <SubscriptionItem key={id} id={id} />
-        ))}
+        {todoIds.map((id) => <SubscriptionItem key={id} id={id} />)}
 
-        {/* Empty state */}
         {todoIds.length === 0 && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyEmoji}>💳</Text>
             <Text style={styles.emptyTitle}>No subscriptions tracked</Text>
-            <Text style={styles.emptySubtitle}>
-              Add your subscriptions to keep on top of recurring costs
-            </Text>
+            <Text style={styles.emptySubtitle}>Add your recurring subscriptions to see where your money goes</Text>
           </View>
         )}
       </View>
@@ -215,128 +172,42 @@ export default function SubscriptionTracker({ listId }: { listId: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAF5FF" },
+  container: { flex: 1, backgroundColor: "#EBF8FF" },
   content: { padding: 16 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
-  title: { fontSize: 22, fontWeight: "bold", color: "#553C9A" },
-  subtitle: { fontSize: 12, color: "#805AD5", fontStyle: "italic" },
-  countBadge: {
-    backgroundColor: "#805AD520",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  countBadgeText: { color: "#553C9A", fontWeight: "600", fontSize: 13 },
-  totalCard: {
-    backgroundColor: "#805AD5",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: "center",
-  },
-  totalLabel: { color: "#E9D8FD", fontSize: 12, fontWeight: "500" },
-  totalAmount: { color: "#FFF", fontSize: 28, fontWeight: "bold", marginTop: 4 },
-  totalSub: { color: "#D6BCFA", fontSize: 12, marginTop: 2 },
-  addSection: {
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    gap: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  addInput: {
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: "#2D3748",
-  },
-  addRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  typeSelector: { flexDirection: "row", gap: 4 },
-  typeOption: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#EDF2F7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  typeOptionActive: { backgroundColor: "#805AD5" },
-  typeOptionText: { fontSize: 12, fontWeight: "600", color: "#718096" },
-  typeOptionTextActive: { color: "#FFF" },
-  addBtn: {
-    backgroundColor: "#805AD5",
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  addBtnText: { color: "#FFF", fontWeight: "bold", fontSize: 14 },
-  item: {
-    backgroundColor: "#FFF",
-    borderRadius: 8,
-    marginBottom: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  itemHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-  },
-  itemLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
-  itemText: { fontSize: 14, fontWeight: "500", color: "#2D3748" },
-  typeBadge: {
-    backgroundColor: "#805AD520",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  typeBadgeText: { fontSize: 10, color: "#805AD5", fontWeight: "600" },
-  itemRight: { flexDirection: "row", alignItems: "center", gap: 8 },
-  amountText: { fontSize: 14, fontWeight: "bold", color: "#2D3748" },
-  expandedSection: {
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#EDF2F7",
-    gap: 8,
-    paddingTop: 8,
-  },
-  notesText: { fontSize: 12, color: "#718096", fontStyle: "italic" },
-  expandedRow: { flexDirection: "row", justifyContent: "space-between" },
-  expandedLabel: { fontSize: 12, color: "#718096" },
-  expandedValue: { fontSize: 12, fontWeight: "600", color: "#553C9A" },
-  deleteRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingTop: 4,
-  },
-  deleteText: { fontSize: 12, color: "#E53E3E", fontWeight: "500" },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  listTitle: { fontSize: 20, fontWeight: "bold", color: "#2A4365" },
+  progressLabel: { fontSize: 12, color: "#3182CE", marginTop: 2 },
+  totalBadge: { backgroundColor: "#BEE3F8", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  totalBadgeText: { fontSize: 15, fontWeight: "bold", color: "#2A4365" },
+  addRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  addInput: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: "#2D3748", borderWidth: 1, borderColor: "#BEE3F8" },
+  addButton: { backgroundColor: "#3182CE", borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10 },
+  addButtonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 15 },
+  itemCard: { backgroundColor: "#FFFFFF", borderRadius: 8, marginBottom: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  itemDone: { opacity: 0.55 },
+  itemRow: { flexDirection: "row", alignItems: "center", padding: 10, gap: 8 },
+  checkbox: { padding: 4 },
+  checkboxInner: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: "#CBD5E0", alignItems: "center", justifyContent: "center" },
+  checkboxChecked: { backgroundColor: "#3182CE", borderColor: "#3182CE" },
+  checkmark: { color: "#FFFFFF", fontSize: 14, fontWeight: "bold" },
+  itemEmoji: { fontSize: 20 },
+  itemInfo: { flex: 1 },
+  itemText: { fontSize: 14, fontWeight: "600", color: "#2D3748" },
+  itemTextDone: { textDecorationLine: "line-through", color: "#A0AEC0" },
+  itemFreq: { fontSize: 11, color: "#718096", marginTop: 2 },
+  annualCost: { fontSize: 12, fontWeight: "600", color: "#3182CE" },
+  iconBtn: { padding: 4 },
+  detailsSection: { backgroundColor: "#EBF8FF", padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: "#BEE3F8" },
+  detailLabel: { fontSize: 13, fontWeight: "500", color: "#2A4365" },
+  detailInput: { backgroundColor: "#FFFFFF", borderRadius: 6, borderWidth: 1, borderColor: "#BEE3F8", paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: "#2D3748" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: "#EDF2F7" },
+  chipActive: { backgroundColor: "#3182CE" },
+  chipText: { fontSize: 12, color: "#4A5568" },
+  chipTextActive: { color: "#FFFFFF", fontWeight: "600" },
   emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
   emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#553C9A" },
-  emptySubtitle: {
-    fontSize: 14,
-    color: "#805AD5",
-    textAlign: "center",
-    maxWidth: 280,
-  },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#2A4365" },
+  emptySubtitle: { fontSize: 14, color: "#3182CE", textAlign: "center", maxWidth: 280 },
 });

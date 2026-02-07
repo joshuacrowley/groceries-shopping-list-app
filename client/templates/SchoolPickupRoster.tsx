@@ -1,26 +1,27 @@
 import React, { useState, useCallback, useMemo, memo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  TextInput,
-  Alert,
-  Modal,
-} from "react-native";
-import {
-  useStore,
-  useLocalRowIds,
-  useRow,
-  useDelRowCallback,
-  useAddRowCallback,
-} from "tinybase/ui-react";
-import { Trash, CaretDown, CaretUp } from "phosphor-react-native";
+import { View, Text, TextInput, Pressable, ScrollView, Alert, StyleSheet, Modal } from "react-native";
+import { useStore, useLocalRowIds, useRow, useSetRowCallback, useDelRowCallback, useAddRowCallback } from "tinybase/ui-react";
+import { Trash, CaretDown, CaretUp, GraduationCap, Student, Car, Clock, MapPin, X } from "phosphor-react-native";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-const RosterItem = memo(({ id }: { id: string }) => {
+const PICKUP_TYPES: Record<string, string> = {
+  A: "Drop Off",
+  B: "Pick Up",
+  C: "Both",
+  D: "None",
+  E: "Special",
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  A: "#3182CE",
+  B: "#38A169",
+  C: "#805AD5",
+  D: "#718096",
+  E: "#ED8936",
+};
+
+const ScheduleItem = memo(({ id }: { id: string }) => {
   const [expanded, setExpanded] = useState(false);
   const itemData = useRow("todos", id);
   const store = useStore();
@@ -28,198 +29,266 @@ const RosterItem = memo(({ id }: { id: string }) => {
 
   if (!itemData) return null;
 
-  const isDone = Boolean(itemData.done);
-
-  const handleToggle = () => store?.setCell("todos", id, "done", !isDone);
   const handleDelete = () => {
-    Alert.alert("Delete", "Remove this entry?", [
+    Alert.alert("Delete", "Delete this schedule?", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: deleteItem },
     ]);
   };
 
+  const handleToggleDone = () => store?.setCell("todos", id, "done", !itemData.done);
+
+  const typeKey = (itemData.type as string) || "A";
+  const typeLabel = PICKUP_TYPES[typeKey] || "Drop Off";
+  const typeColor = TYPE_COLORS[typeKey] || "#3182CE";
+
   return (
-    <View style={[styles.itemCard, isDone && styles.itemDone]}>
-      <View style={styles.itemRow}>
-        <Pressable onPress={handleToggle} style={styles.checkbox}>
-          <View style={[styles.checkboxInner, isDone && styles.checkboxChecked]}>
-            {isDone && <Text style={styles.checkmark}>✓</Text>}
-          </View>
-        </Pressable>
-        <View style={styles.itemInfo}>
-          <Text style={[styles.itemText, isDone && styles.itemTextDone]}>{String(itemData.text || "")}</Text>
-          <View style={styles.metaRow}>
-            {itemData.category && <Text style={styles.metaText}>📅 {String(itemData.category)}</Text>}
-            {itemData.time && <Text style={styles.metaText}>🕐 {String(itemData.time)}</Text>}
-            {itemData.email && <Text style={styles.metaText}>👤 {String(itemData.email)}</Text>}
+    <View style={styles.scheduleCard}>
+      <View style={styles.scheduleHeader}>
+        <View style={styles.scheduleInfo}>
+          <Student size={22} color="#38A169" />
+          <Text style={styles.scheduleName}>{itemData.text as string}</Text>
+          <View style={[styles.typeBadge, { backgroundColor: typeColor + "20" }]}>
+            <Text style={[styles.typeBadgeText, { color: typeColor }]}>{typeLabel}</Text>
           </View>
         </View>
-        <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
-          {expanded ? <CaretUp size={16} color="#805AD5" /> : <CaretDown size={16} color="#805AD5" />}
-        </Pressable>
-        <Pressable onPress={handleDelete} style={styles.iconBtn}>
-          <Trash size={16} color="#E53E3E" />
-        </Pressable>
+        <View style={styles.scheduleActions}>
+          <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
+            {expanded ? <CaretUp size={18} color="#718096" /> : <CaretDown size={18} color="#718096" />}
+          </Pressable>
+          <Pressable onPress={handleDelete} style={styles.iconBtn}>
+            <Trash size={18} color="#E53E3E" weight="bold" />
+          </Pressable>
+        </View>
       </View>
       {expanded && (
-        <View style={styles.detailsSection}>
-          <Text style={styles.detailLabel}>Day:</Text>
-          <View style={styles.chipRow}>
-            {DAYS.map((d) => (
-              <Pressable key={d} onPress={() => store?.setCell("todos", id, "category", d)}
-                style={[styles.chip, String(itemData.category) === d && styles.chipActive]}>
-                <Text style={[styles.chipText, String(itemData.category) === d && styles.chipTextActive]}>{d.slice(0, 3)}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={styles.detailLabel}>Time:</Text>
-          <TextInput style={styles.detailInput} value={String(itemData.time || "")}
-            onChangeText={(t) => store?.setCell("todos", id, "time", t)} placeholder="3:15 PM" placeholderTextColor="#A0AEC0" />
-          <Text style={styles.detailLabel}>Pickup Person:</Text>
-          <TextInput style={styles.detailInput} value={String(itemData.email || "")}
-            onChangeText={(t) => store?.setCell("todos", id, "email", t)} placeholder="Who's picking up" placeholderTextColor="#A0AEC0" />
-          <Text style={styles.detailLabel}>Notes:</Text>
-          <TextInput style={[styles.detailInput, { minHeight: 50, textAlignVertical: "top" }]}
-            value={String(itemData.notes || "")} onChangeText={(t) => store?.setCell("todos", id, "notes", t)}
-            placeholder="Any special instructions" placeholderTextColor="#A0AEC0" multiline />
+        <View style={styles.expandedContent}>
+          {itemData.time ? (
+            <View style={styles.detailRow}>
+              <Clock size={18} color="#718096" />
+              <Text style={styles.detailText}>{itemData.time as string}</Text>
+            </View>
+          ) : null}
+          {itemData.streetAddress ? (
+            <View style={styles.detailRow}>
+              <MapPin size={18} color="#718096" />
+              <Text style={styles.detailText}>{itemData.streetAddress as string}</Text>
+            </View>
+          ) : null}
+          <Pressable onPress={handleToggleDone} style={[styles.confirmBtn, itemData.done && styles.confirmedBtn]}>
+            <Text style={[styles.confirmBtnText, itemData.done && styles.confirmedBtnText]}>
+              {itemData.done ? "✓ Confirmed" : "Tap to confirm"}
+            </Text>
+          </Pressable>
         </View>
       )}
     </View>
   );
 });
-RosterItem.displayName = "RosterItem";
+ScheduleItem.displayName = "ScheduleItem";
 
 export default function SchoolPickupRoster({ listId }: { listId: string }) {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newEntry, setNewEntry] = useState({ text: "", category: "Monday", time: "", email: "", notes: "" });
-  const todoIds = useLocalRowIds("todoList", listId) || [];
-  const listData = useRow("lists", listId);
+  const [selectedDay, setSelectedDay] = useState("");
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newSchedule, setNewSchedule] = useState({ text: "", type: "A", time: "", streetAddress: "" });
+  const [showTypePicker, setShowTypePicker] = useState(false);
 
-  const addEntry = useAddRowCallback(
+  const store = useStore();
+  const scheduleIds = useLocalRowIds("todoList", listId) || [];
+
+  const addSchedule = useAddRowCallback(
     "todos",
-    (entry: any) => ({
-      text: entry.text.trim(),
-      category: entry.category,
-      time: entry.time,
-      email: entry.email,
-      notes: entry.notes,
+    (data: any) => ({
+      text: data.text.trim(),
+      type: data.type,
+      time: data.time || "",
+      streetAddress: data.streetAddress || "",
+      category: data.category,
       list: listId,
       done: false,
     }),
     [listId]
   );
 
-  const handleAddSubmit = () => {
-    if (newEntry.text.trim()) {
-      addEntry(newEntry);
-      setNewEntry({ text: "", category: "Monday", time: "", email: "", notes: "" });
-      setShowAddModal(false);
+  const handleAdd = useCallback(() => {
+    if (newSchedule.text.trim()) {
+      addSchedule({ ...newSchedule, category: selectedDay });
+      setNewSchedule({ text: "", type: "A", time: "", streetAddress: "" });
+      setModalVisible(false);
     }
+  }, [addSchedule, newSchedule, selectedDay]);
+
+  const handleAddClick = (day: string) => {
+    setSelectedDay(day);
+    setModalVisible(true);
   };
+
+  const schedulesByDay = useMemo(() => {
+    const result: Record<string, string[]> = {};
+    DAYS.forEach((day) => {
+      result[day] = scheduleIds.filter((id) => {
+        const schedule = store?.getRow("todos", id);
+        return schedule?.category === day;
+      });
+    });
+    return result;
+  }, [scheduleIds, store]);
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.listTitle}>{String(listData?.name || "School Pickup Roster")}</Text>
-            <Text style={styles.progressLabel}>Keep pickup organized 🎒</Text>
-          </View>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{todoIds.length} entries</Text>
-          </View>
+      <View style={styles.header}>
+        <GraduationCap size={28} color="#276749" weight="fill" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>School Pickup Roster</Text>
+          <Text style={styles.subtitle}>
+            {scheduleIds.length === 0 ? "Plan pickup duties! 🚗" : `${scheduleIds.length} schedules`}
+          </Text>
         </View>
-
-        <Pressable onPress={() => setShowAddModal(true)} style={styles.addButton}>
-          <Text style={styles.addButtonText}>+ Add Pickup Entry</Text>
-        </Pressable>
-
-        {todoIds.map((id) => <RosterItem key={id} id={id} />)}
-
-        {todoIds.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>🎒</Text>
-            <Text style={styles.emptyTitle}>No pickup entries yet</Text>
-            <Text style={styles.emptySubtitle}>Set up your weekly pickup roster</Text>
-          </View>
-        )}
+        <View style={styles.countBadge}>
+          <Text style={styles.countBadgeText}>{scheduleIds.length} schedules</Text>
+        </View>
       </View>
 
-      <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={() => setShowAddModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowAddModal(false)}>
-          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Add Pickup Entry</Text>
-            <TextInput style={styles.modalInput} value={newEntry.text}
-              onChangeText={(t) => setNewEntry({ ...newEntry, text: t })} placeholder="Child's name" placeholderTextColor="#A0AEC0" />
-            <View style={styles.chipRow}>
-              {DAYS.map((d) => (
-                <Pressable key={d} onPress={() => setNewEntry({ ...newEntry, category: d })}
-                  style={[styles.chip, newEntry.category === d && styles.chipActive]}>
-                  <Text style={[styles.chipText, newEntry.category === d && styles.chipTextActive]}>{d.slice(0, 3)}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <TextInput style={styles.modalInput} value={newEntry.time}
-              onChangeText={(t) => setNewEntry({ ...newEntry, time: t })} placeholder="Pickup time" placeholderTextColor="#A0AEC0" />
-            <TextInput style={styles.modalInput} value={newEntry.email}
-              onChangeText={(t) => setNewEntry({ ...newEntry, email: t })} placeholder="Who's picking up" placeholderTextColor="#A0AEC0" />
-            <View style={styles.modalButtons}>
-              <Pressable onPress={handleAddSubmit} style={styles.modalSubmit}>
-                <Text style={styles.modalSubmitText}>Add</Text>
+      {scheduleIds.length === 0 && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyEmoji}>🚗</Text>
+          <Text style={styles.emptyTitle}>No pickup roster yet</Text>
+          <Text style={styles.emptySubtitle}>Add pickup schedules to stay organized</Text>
+        </View>
+      )}
+
+      {DAYS.map((day) => (
+        <View key={day} style={styles.dayCard}>
+          <View style={styles.dayHeader}>
+            <Text style={styles.dayTitle}>{day}</Text>
+            <Pressable onPress={() => handleAddClick(day)} style={styles.dayAddBtn}>
+              <Text style={styles.dayAddBtnText}>+ Add Schedule</Text>
+            </Pressable>
+          </View>
+          {schedulesByDay[day]?.length > 0 ? (
+            schedulesByDay[day].map((id) => <ScheduleItem key={id} id={id} />)
+          ) : (
+            <Text style={styles.noScheduleText}>No schedules for {day}</Text>
+          )}
+        </View>
+      ))}
+
+      <View style={{ height: 40 }} />
+
+      {/* Add Schedule Modal */}
+      <Modal visible={modalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Schedule for {selectedDay}</Text>
+              <Pressable onPress={() => setModalVisible(false)}>
+                <X size={24} color="#718096" />
               </Pressable>
-              <Pressable onPress={() => setShowAddModal(false)} style={styles.modalCancel}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
+            </View>
+            <Text style={styles.fieldLabel}>Child's Name</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newSchedule.text}
+              onChangeText={(t) => setNewSchedule({ ...newSchedule, text: t })}
+              placeholder="Enter name"
+              placeholderTextColor="#A0AEC0"
+            />
+            <Text style={styles.fieldLabel}>Schedule Type</Text>
+            <Pressable onPress={() => setShowTypePicker(!showTypePicker)} style={styles.typeSelector}>
+              <Text style={styles.typeSelectorText}>{PICKUP_TYPES[newSchedule.type]}</Text>
+              <CaretDown size={16} color="#718096" />
+            </Pressable>
+            {showTypePicker && (
+              <View style={styles.typePickerList}>
+                {Object.entries(PICKUP_TYPES).map(([key, value]) => (
+                  <Pressable
+                    key={key}
+                    style={[styles.typeOption, newSchedule.type === key && styles.typeOptionActive]}
+                    onPress={() => { setNewSchedule({ ...newSchedule, type: key }); setShowTypePicker(false); }}
+                  >
+                    <Text style={styles.typeOptionText}>{value}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <Text style={styles.fieldLabel}>Time</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newSchedule.time}
+              onChangeText={(t) => setNewSchedule({ ...newSchedule, time: t })}
+              placeholder="e.g., 3:30 PM"
+              placeholderTextColor="#A0AEC0"
+            />
+            <Text style={styles.fieldLabel}>Location</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newSchedule.streetAddress}
+              onChangeText={(t) => setNewSchedule({ ...newSchedule, streetAddress: t })}
+              placeholder="Enter location"
+              placeholderTextColor="#A0AEC0"
+            />
+            <View style={styles.modalActions}>
+              <Pressable onPress={handleAdd} style={styles.modalAddBtn}>
+                <Text style={styles.modalAddBtnText}>Add Schedule</Text>
+              </Pressable>
+              <Pressable onPress={() => setModalVisible(false)} style={styles.modalCancelBtn}>
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
               </Pressable>
             </View>
           </View>
-        </Pressable>
+        </View>
       </Modal>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAF5FF" },
-  content: { padding: 16 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
-  listTitle: { fontSize: 22, fontWeight: "bold", color: "#553C9A" },
-  progressLabel: { fontSize: 12, color: "#805AD5", fontStyle: "italic", marginTop: 2 },
-  countBadge: { backgroundColor: "#E9D8FD", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 16 },
-  countBadgeText: { fontSize: 13, fontWeight: "600", color: "#553C9A" },
-  addButton: { backgroundColor: "#805AD5", borderRadius: 8, padding: 12, alignItems: "center", marginBottom: 16 },
-  addButtonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 15 },
-  itemCard: { backgroundColor: "#FFFFFF", borderRadius: 8, marginBottom: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  itemDone: { opacity: 0.6 },
-  itemRow: { flexDirection: "row", alignItems: "center", padding: 10, gap: 8 },
-  checkbox: { padding: 4 },
-  checkboxInner: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: "#CBD5E0", alignItems: "center", justifyContent: "center" },
-  checkboxChecked: { backgroundColor: "#805AD5", borderColor: "#805AD5" },
-  checkmark: { color: "#FFFFFF", fontSize: 14, fontWeight: "bold" },
-  itemInfo: { flex: 1 },
-  itemText: { fontSize: 15, fontWeight: "600", color: "#2D3748" },
-  itemTextDone: { textDecorationLine: "line-through", color: "#A0AEC0" },
-  metaRow: { flexDirection: "row", gap: 10, marginTop: 4 },
-  metaText: { fontSize: 11, color: "#718096" },
+  container: { flex: 1, backgroundColor: "#F0FFF4" },
+  header: { flexDirection: "row", alignItems: "center", padding: 20, gap: 12 },
+  title: { fontSize: 22, fontWeight: "bold", color: "#276749" },
+  subtitle: { fontSize: 13, color: "#38A169" },
+  countBadge: { backgroundColor: "#C6F6D5", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  countBadgeText: { fontSize: 13, color: "#276749", fontWeight: "600" },
+  emptyState: { alignItems: "center", paddingVertical: 40 },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#276749" },
+  emptySubtitle: { fontSize: 13, color: "#718096", textAlign: "center", maxWidth: 260, marginTop: 4 },
+  dayCard: { marginHorizontal: 16, marginBottom: 16, backgroundColor: "#F0FFF4", borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "#C6F6D5" },
+  dayHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  dayTitle: { fontSize: 17, fontWeight: "bold", color: "#2D3748" },
+  dayAddBtn: { backgroundColor: "#38A169", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  dayAddBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
+  noScheduleText: { fontSize: 13, color: "#A0AEC0", textAlign: "center", paddingVertical: 12 },
+  scheduleCard: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 12, marginBottom: 8, borderLeftWidth: 4, borderLeftColor: "#C6F6D5" },
+  scheduleHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  scheduleInfo: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  scheduleName: { fontSize: 15, fontWeight: "bold", color: "#2D3748" },
+  typeBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  typeBadgeText: { fontSize: 11, fontWeight: "600" },
+  scheduleActions: { flexDirection: "row", gap: 4 },
   iconBtn: { padding: 4 },
-  detailsSection: { backgroundColor: "#FAF5FF", padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: "#E9D8FD" },
-  detailLabel: { fontSize: 13, fontWeight: "500", color: "#553C9A" },
-  detailInput: { backgroundColor: "#FFFFFF", borderRadius: 6, borderWidth: 1, borderColor: "#E9D8FD", paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: "#2D3748" },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: "#EDF2F7" },
-  chipActive: { backgroundColor: "#805AD5" },
-  chipText: { fontSize: 12, color: "#4A5568" },
-  chipTextActive: { color: "#FFFFFF", fontWeight: "600" },
-  emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
-  emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#553C9A" },
-  emptySubtitle: { fontSize: 14, color: "#805AD5", textAlign: "center", maxWidth: 280 },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center" },
-  modalContent: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 20, width: 320, gap: 10 },
-  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#553C9A" },
-  modalInput: { backgroundColor: "#F7FAFC", borderRadius: 8, borderWidth: 1, borderColor: "#E9D8FD", paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: "#2D3748" },
-  modalButtons: { flexDirection: "row", gap: 10, marginTop: 8 },
-  modalSubmit: { flex: 1, backgroundColor: "#805AD5", borderRadius: 8, padding: 12, alignItems: "center" },
-  modalSubmitText: { color: "#FFFFFF", fontWeight: "bold" },
-  modalCancel: { flex: 1, backgroundColor: "#EDF2F7", borderRadius: 8, padding: 12, alignItems: "center" },
-  modalCancelText: { color: "#4A5568", fontWeight: "500" },
+  expandedContent: { marginTop: 10, gap: 8 },
+  detailRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  detailText: { fontSize: 13, color: "#4A5568" },
+  confirmBtn: { backgroundColor: "#EDF2F7", borderRadius: 8, padding: 10, alignItems: "center" },
+  confirmedBtn: { backgroundColor: "#C6F6D5" },
+  confirmBtnText: { color: "#718096", fontWeight: "600", fontSize: 13 },
+  confirmedBtnText: { color: "#276749" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 20 },
+  modalContent: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#2D3748" },
+  fieldLabel: { fontSize: 13, fontWeight: "600", color: "#4A5568", marginBottom: 4, marginTop: 8 },
+  modalInput: { backgroundColor: "#F7FAFC", borderRadius: 8, padding: 12, fontSize: 14, color: "#2D3748", borderWidth: 1, borderColor: "#E2E8F0" },
+  typeSelector: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#F7FAFC", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: "#E2E8F0" },
+  typeSelectorText: { fontSize: 14, color: "#2D3748" },
+  typePickerList: { backgroundColor: "#F7FAFC", borderRadius: 8, borderWidth: 1, borderColor: "#E2E8F0", marginTop: 4 },
+  typeOption: { padding: 12, borderBottomWidth: 1, borderBottomColor: "#EDF2F7" },
+  typeOptionActive: { backgroundColor: "#F0FFF4" },
+  typeOptionText: { fontSize: 14, color: "#2D3748" },
+  modalActions: { gap: 8, marginTop: 16 },
+  modalAddBtn: { backgroundColor: "#38A169", borderRadius: 8, padding: 14, alignItems: "center" },
+  modalAddBtnText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 15 },
+  modalCancelBtn: { padding: 10, alignItems: "center" },
+  modalCancelBtnText: { color: "#718096", fontSize: 14 },
 });

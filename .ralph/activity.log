@@ -100,3 +100,10 @@ done → exit 0
 [16:26:55] 🟡 READ /Users/jac/dev/groceries-shopping-list-app/tiny-talking-todos-templates-for-react-native/templates/TidyUp.tsx (377 lines, ~36.8KB)
 [16:26:59] 🔴 READ /Users/jac/dev/groceries-shopping-list-app/client/templates/Expiry.tsx (131 lines, ~12.7KB)
 [16:27:39] 🔴 TOKENS: 64456 / 80000 (80%) - approaching limit [read:247KB write:0KB assist:1KB shell:0KB]
+[16:28:15] 🔴 TOKENS: 64456 / 80000 (80%) - approaching limit [read:247KB write:0KB assist:1KB shell:0KB]
+[16:28:31] 🔴 READ /Users/jac/dev/groceries-shopping-list-app/client/app/(index)/list/[listId]/index.tsx (469 lines, ~45.8KB)
+[16:28:31] 🔴 WARN: Approaching token limit (76228 >= 70000)
+[16:28:35] 🔴 READ /Users/jac/dev/groceries-shopping-list-app/client/app/(index)/list/[listId]/index.tsx (469 lines, ~45.8KB)
+[16:28:35] 🔴 ROTATE: Token threshold reached (87970 >= 80000)
+[16:28:38] 🔴 READ /Users/jac/dev/groceries-shopping-list-app/client/app/(index)/list/[listId]/index.tsx (469 lines, ~45.8KB)
+[16:28:38] 🔴 ROTATE: Token threshold reached (99695 >= 80000)

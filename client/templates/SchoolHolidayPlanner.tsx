@@ -1,80 +1,136 @@
 import React, { useState, useCallback, useMemo, memo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  TextInput,
-  Alert,
-  Modal,
-} from "react-native";
-import {
-  useLocalRowIds,
-  useRow,
-  useDelRowCallback,
-  useAddRowCallback,
-  useStore,
-} from "tinybase/ui-react";
-import { Trash, CaretDown, CaretUp } from "phosphor-react-native";
+import { View, Text, TextInput, Pressable, ScrollView, Alert, StyleSheet, Modal } from "react-native";
+import { useStore, useLocalRowIds, useRow, useSetRowCallback, useDelRowCallback, useAddRowCallback } from "tinybase/ui-react";
+import { Trash, CaretDown, CaretUp, Sun, Plus, MapPin, Eye, EyeSlash, X } from "phosphor-react-native";
 
 const CATEGORIES = [
-  { name: "Outdoors", emoji: "☀️" },
-  { name: "Creative", emoji: "🎨" },
-  { name: "Social", emoji: "👥" },
-  { name: "Learning", emoji: "📚" },
-  { name: "Travel", emoji: "✈️" },
-  { name: "Home", emoji: "🏠" },
-  { name: "Other", emoji: "📋" },
+  { name: "Day Trip", color: "#3182CE", emoji: "📍" },
+  { name: "Beach Day", color: "#0BC5EA", emoji: "🏖️" },
+  { name: "Home Activity", color: "#805AD5", emoji: "🏠" },
+  { name: "Educational", color: "#38A169", emoji: "📚" },
+  { name: "Sports & Games", color: "#ED8936", emoji: "⚽" },
+  { name: "Social", color: "#ED64A6", emoji: "👥" },
+  { name: "Adventure", color: "#E53E3E", emoji: "🏔️" },
+  { name: "City Visit", color: "#718096", emoji: "🏙️" },
+  { name: "Nature", color: "#319795", emoji: "🌳" },
+  { name: "Swimming", color: "#3182CE", emoji: "🏊" },
+  { name: "Camping", color: "#38A169", emoji: "⛺" },
+  { name: "Special Event", color: "#ECC94B", emoji: "✨" },
 ];
 
-const ActivityItem = memo(({ id }: { id: string }) => {
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  return `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]}`;
+};
+
+const isToday = (dateStr: string) => new Date(dateStr).toDateString() === new Date().toDateString();
+
+const isTomorrow = (dateStr: string) => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return new Date(dateStr).toDateString() === tomorrow.toDateString();
+};
+
+const isPast = (dateStr: string) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const date = new Date(dateStr);
+  date.setHours(0, 0, 0, 0);
+  return date < today;
+};
+
+const daysDifference = (dateStr: string) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const date = new Date(dateStr);
+  date.setHours(0, 0, 0, 0);
+  return Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const ActivityItem = memo(({ id, isNext }: { id: string; isNext: boolean }) => {
   const [expanded, setExpanded] = useState(false);
-  const itemData = useRow("todos", id);
+  const activityData = useRow("todos", id);
   const store = useStore();
-  const deleteItem = useDelRowCallback("todos", id);
+  const deleteActivity = useDelRowCallback("todos", id);
 
-  if (!itemData) return null;
+  if (!activityData) return null;
 
-  const isDone = Boolean(itemData.done);
-
-  const handleToggle = () => store?.setCell("todos", id, "done", !isDone);
+  const handleToggleDone = () => store?.setCell("todos", id, "done", !activityData.done);
   const handleDelete = () => {
-    Alert.alert("Delete", "Remove this activity?", [
+    Alert.alert("Delete", "Delete this activity?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: deleteItem },
+      { text: "Delete", style: "destructive", onPress: deleteActivity },
     ]);
   };
 
+  const category = CATEGORIES.find((c) => c.name === activityData.category) || CATEGORIES[0];
+  const dateStr = formatDate(activityData.date as string);
+
+  let dateLabel = "";
+  if (activityData.date) {
+    if (isToday(activityData.date as string)) dateLabel = "Today";
+    else if (isTomorrow(activityData.date as string)) dateLabel = "Tomorrow";
+    else {
+      const daysUntil = daysDifference(activityData.date as string);
+      if (daysUntil > 0 && daysUntil <= 7) dateLabel = `In ${daysUntil} days`;
+    }
+  }
+
   return (
-    <View style={[styles.itemCard, isDone && styles.itemDone]}>
-      <View style={styles.itemRow}>
-        <Pressable onPress={handleToggle} style={styles.checkbox}>
-          <View style={[styles.checkboxInner, isDone && styles.checkboxChecked]}>
-            {isDone && <Text style={styles.checkmark}>✓</Text>}
+    <View style={[styles.activityCard, isNext && styles.nextCard, activityData.done && { opacity: 0.6 }]}>
+      <View style={styles.activityHeader}>
+        <View style={styles.activityInfo}>
+          <Text style={{ fontSize: 20 }}>{category.emoji}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.activityTitle, activityData.done && styles.doneText]}>{activityData.text as string}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={styles.activityDate}>{dateStr}</Text>
+              {dateLabel ? (
+                <View style={[styles.badge, isNext && styles.nextBadge]}>
+                  <Text style={[styles.badgeText, isNext && styles.nextBadgeText]}>{dateLabel}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
-        </Pressable>
-        <Text style={styles.itemEmoji}>{String(itemData.emoji || "🌴")}</Text>
-        <View style={styles.itemInfo}>
-          <Text style={[styles.itemText, isDone && styles.itemTextDone]} numberOfLines={1}>{String(itemData.text || "")}</Text>
-          {itemData.date && <Text style={styles.itemDate}>{String(itemData.date)}</Text>}
         </View>
-        <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
-          {expanded ? <CaretUp size={16} color="#38A169" /> : <CaretDown size={16} color="#38A169" />}
-        </Pressable>
-        <Pressable onPress={handleDelete} style={styles.iconBtn}>
-          <Trash size={16} color="#E53E3E" />
-        </Pressable>
+        <View style={styles.activityActions}>
+          {isNext && (
+            <View style={styles.nextUpBadge}>
+              <Text style={styles.nextUpText}>Next Up</Text>
+            </View>
+          )}
+          <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
+            {expanded ? <CaretUp size={18} color="#718096" /> : <CaretDown size={18} color="#718096" />}
+          </Pressable>
+          <Pressable onPress={handleDelete} style={styles.iconBtn}>
+            <Trash size={18} color="#E53E3E" weight="bold" />
+          </Pressable>
+        </View>
       </View>
       {expanded && (
-        <View style={styles.detailsSection}>
-          <Text style={styles.detailLabel}>Date:</Text>
-          <TextInput style={styles.detailInput} value={String(itemData.date || "")}
-            onChangeText={(t) => store?.setCell("todos", id, "date", t)} placeholder="YYYY-MM-DD" placeholderTextColor="#A0AEC0" />
-          <Text style={styles.detailLabel}>Notes:</Text>
-          <TextInput style={[styles.detailInput, { minHeight: 50, textAlignVertical: "top" }]}
-            value={String(itemData.notes || "")} onChangeText={(t) => store?.setCell("todos", id, "notes", t)}
-            placeholder="Details..." placeholderTextColor="#A0AEC0" multiline />
+        <View style={styles.expandedContent}>
+          {activityData.notes ? (
+            <View>
+              <Text style={styles.detailLabel}>Description:</Text>
+              <Text style={styles.detailText}>{activityData.notes as string}</Text>
+            </View>
+          ) : null}
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <View style={[styles.badge, { backgroundColor: category.color + "20" }]}>
+              <Text style={[styles.badgeText, { color: category.color }]}>{category.name}</Text>
+            </View>
+            {activityData.done && (
+              <View style={[styles.badge, { backgroundColor: "#C6F6D5" }]}>
+                <Text style={[styles.badgeText, { color: "#276749" }]}>Completed</Text>
+              </View>
+            )}
+          </View>
+          <Pressable onPress={handleToggleDone} style={styles.completeButton}>
+            <Text style={styles.completeButtonText}>{activityData.done ? "Mark incomplete" : "Mark as complete"}</Text>
+          </Pressable>
         </View>
       )}
     </View>
@@ -83,126 +139,242 @@ const ActivityItem = memo(({ id }: { id: string }) => {
 ActivityItem.displayName = "ActivityItem";
 
 export default function SchoolHolidayPlanner({ listId }: { listId: string }) {
-  const [newActivity, setNewActivity] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("Outdoors");
+  const [showPast, setShowPast] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newActivity, setNewActivity] = useState({ text: "", date: "", category: CATEGORIES[0].name, notes: "" });
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
-  const todoIds = useLocalRowIds("todoList", listId) || [];
-  const listData = useRow("lists", listId);
+
+  const store = useStore();
+  const activityIds = useLocalRowIds("todoList", listId) || [];
 
   const addActivity = useAddRowCallback(
     "todos",
-    (text: string) => ({
-      text: text.trim(),
-      category: selectedCategory,
-      emoji: CATEGORIES.find((c) => c.name === selectedCategory)?.emoji || "🌴",
+    (data: any) => ({
+      text: data.text.trim(),
+      date: data.date,
+      category: data.category,
+      notes: data.notes || "",
       list: listId,
       done: false,
-      date: "",
-      notes: "",
     }),
-    [listId, selectedCategory],
-    undefined,
-    (rowId) => { if (rowId) setNewActivity(""); }
+    [listId]
   );
 
   const handleAdd = useCallback(() => {
-    if (newActivity.trim()) addActivity(newActivity);
+    if (newActivity.text.trim() && newActivity.date) {
+      addActivity(newActivity);
+      setNewActivity({ text: "", date: "", category: CATEGORIES[0].name, notes: "" });
+      setModalVisible(false);
+    }
   }, [addActivity, newActivity]);
 
-  const progressLabel = useMemo(() => {
-    if (todoIds.length === 0) return "Plan some holiday fun! ☀️";
-    if (todoIds.length <= 5) return "Holiday ideas brewing 🌴";
-    return "Packed holiday ahead! 🎉";
-  }, [todoIds.length]);
+  const { pastActivities, futureActivities, nextActivityId } = useMemo(() => {
+    const past: string[] = [];
+    const future: string[] = [];
+    let nextId: string | null = null;
+    let minDays = Infinity;
+
+    activityIds.forEach((id) => {
+      const activity = store?.getRow("todos", id);
+      if (activity && activity.date) {
+        if (isPast(activity.date as string)) {
+          past.push(id);
+        } else {
+          future.push(id);
+          if (!activity.done) {
+            const daysUntil = daysDifference(activity.date as string);
+            if (daysUntil >= 0 && daysUntil < minDays) {
+              minDays = daysUntil;
+              nextId = id;
+            }
+          }
+        }
+      }
+    });
+
+    past.sort((a, b) => {
+      const da = store?.getCell("todos", a, "date") as string;
+      const db = store?.getCell("todos", b, "date") as string;
+      return new Date(db).getTime() - new Date(da).getTime();
+    });
+    future.sort((a, b) => {
+      const da = store?.getCell("todos", a, "date") as string;
+      const db = store?.getCell("todos", b, "date") as string;
+      return new Date(da).getTime() - new Date(db).getTime();
+    });
+
+    return { pastActivities: past, futureActivities: future, nextActivityId: nextId };
+  }, [activityIds, store]);
+
+  const selectedCategory = CATEGORIES.find((c) => c.name === newActivity.category) || CATEGORIES[0];
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.listTitle}>{String(listData?.name || "School Holiday Planner")}</Text>
-            <Text style={styles.progressLabel}>{progressLabel}</Text>
-          </View>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{todoIds.length} activities</Text>
-          </View>
-        </View>
-
-        <Pressable onPress={() => setShowCategoryPicker(!showCategoryPicker)} style={styles.categoryPickerBtn}>
-          <Text style={styles.categoryPickerText}>
-            {CATEGORIES.find((c) => c.name === selectedCategory)?.emoji} {selectedCategory}
+      <View style={styles.header}>
+        <Sun size={28} color="#2A4365" weight="fill" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>School Holiday Planner</Text>
+          <Text style={styles.subtitle}>
+            {activityIds.length === 0 ? "Plan those holidays! 🏖️" : `${futureActivities.length} planned`}
           </Text>
-          <CaretDown size={14} color="#718096" />
+        </View>
+        <Pressable onPress={() => setModalVisible(true)} style={styles.addBtn}>
+          <Plus size={20} color="#FFFFFF" weight="bold" />
         </Pressable>
-        {showCategoryPicker && (
-          <View style={styles.pickerDropdown}>
-            {CATEGORIES.map(({ name, emoji }) => (
-              <Pressable key={name} onPress={() => { setSelectedCategory(name); setShowCategoryPicker(false); }}
-                style={[styles.pickerOption, selectedCategory === name && styles.pickerOptionActive]}>
-                <Text>{emoji} {name}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+      </View>
 
-        <View style={styles.addRow}>
-          <TextInput style={styles.addInput} value={newActivity} onChangeText={setNewActivity}
-            placeholder="Add holiday activity..." placeholderTextColor="#A0AEC0"
-            onSubmitEditing={handleAdd} returnKeyType="done" />
-          <Pressable onPress={handleAdd} style={styles.addButton}>
-            <Text style={styles.addButtonText}>Add</Text>
-          </Pressable>
+      {/* Upcoming Activities */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Upcoming Activities</Text>
+          <View style={styles.countBadge}>
+            <Text style={styles.countBadgeText}>{futureActivities.length} planned</Text>
+          </View>
         </View>
 
-        {todoIds.map((id) => <ActivityItem key={id} id={id} />)}
-
-        {todoIds.length === 0 && (
+        {futureActivities.length === 0 && (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>🌴</Text>
-            <Text style={styles.emptyTitle}>No holiday plans yet!</Text>
-            <Text style={styles.emptySubtitle}>Add activities to make the most of the holidays</Text>
+            <Text style={styles.emptyEmoji}>☀️</Text>
+            <Text style={styles.emptyTitle}>No activities planned yet!</Text>
+            <Text style={styles.emptySubtitle}>Tap + to add some fun holiday activities</Text>
           </View>
         )}
+
+        {futureActivities.map((id) => (
+          <ActivityItem key={id} id={id} isNext={id === nextActivityId} />
+        ))}
       </View>
+
+      {/* Past Activities */}
+      {pastActivities.length > 0 && (
+        <View style={styles.section}>
+          <Pressable onPress={() => setShowPast(!showPast)} style={styles.pastToggle}>
+            {showPast ? <EyeSlash size={18} color="#718096" /> : <Eye size={18} color="#718096" />}
+            <Text style={styles.pastToggleText}>
+              {showPast ? "Hide" : "Show"} Past Activities ({pastActivities.length})
+            </Text>
+          </Pressable>
+          {showPast && pastActivities.map((id) => <ActivityItem key={id} id={id} isNext={false} />)}
+        </View>
+      )}
+
+      <View style={{ height: 40 }} />
+
+      {/* Add Activity Modal */}
+      <Modal visible={modalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Holiday Activity</Text>
+              <Pressable onPress={() => setModalVisible(false)}>
+                <X size={24} color="#718096" />
+              </Pressable>
+            </View>
+            <TextInput
+              style={styles.modalInput}
+              value={newActivity.text}
+              onChangeText={(t) => setNewActivity({ ...newActivity, text: t })}
+              placeholder="Activity name (e.g., Trip to the Zoo)"
+              placeholderTextColor="#A0AEC0"
+            />
+            <TextInput
+              style={styles.modalInput}
+              value={newActivity.date}
+              onChangeText={(t) => setNewActivity({ ...newActivity, date: t })}
+              placeholder="Date (YYYY-MM-DD)"
+              placeholderTextColor="#A0AEC0"
+            />
+            <Pressable onPress={() => setShowCategoryPicker(!showCategoryPicker)} style={styles.categorySelector}>
+              <Text style={styles.categorySelectorText}>{selectedCategory.emoji} {selectedCategory.name}</Text>
+              <CaretDown size={16} color="#718096" />
+            </Pressable>
+            {showCategoryPicker && (
+              <ScrollView style={styles.categoryPickerList} nestedScrollEnabled>
+                {CATEGORIES.map((cat) => (
+                  <Pressable
+                    key={cat.name}
+                    style={[styles.categoryOption, newActivity.category === cat.name && styles.categoryOptionActive]}
+                    onPress={() => { setNewActivity({ ...newActivity, category: cat.name }); setShowCategoryPicker(false); }}
+                  >
+                    <Text style={styles.categoryOptionText}>{cat.emoji} {cat.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+            <TextInput
+              style={[styles.modalInput, { height: 80, textAlignVertical: "top" }]}
+              value={newActivity.notes}
+              onChangeText={(t) => setNewActivity({ ...newActivity, notes: t })}
+              placeholder="Description (optional)"
+              placeholderTextColor="#A0AEC0"
+              multiline
+            />
+            <View style={styles.modalActions}>
+              <Pressable onPress={handleAdd} style={styles.modalAddBtn}>
+                <Text style={styles.modalAddBtnText}>Add Activity</Text>
+              </Pressable>
+              <Pressable onPress={() => setModalVisible(false)} style={styles.modalCancelBtn}>
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F0FFF4" },
-  content: { padding: 16 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
-  listTitle: { fontSize: 22, fontWeight: "bold", color: "#276749" },
-  progressLabel: { fontSize: 12, color: "#38A169", fontStyle: "italic", marginTop: 2 },
-  countBadge: { backgroundColor: "#C6F6D5", paddingHorizontal: 12, paddingVertical: 4, borderRadius: 16 },
-  countBadgeText: { fontSize: 13, fontWeight: "600", color: "#276749" },
-  categoryPickerBtn: { flexDirection: "row", alignItems: "center", backgroundColor: "#FFFFFF", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: "#C6F6D5", marginBottom: 8, gap: 6, alignSelf: "flex-start" },
-  categoryPickerText: { fontSize: 14, color: "#4A5568" },
-  pickerDropdown: { backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: "#C6F6D5", overflow: "hidden", marginBottom: 8 },
-  pickerOption: { paddingHorizontal: 12, paddingVertical: 10 },
-  pickerOptionActive: { backgroundColor: "#F0FFF4" },
-  addRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  addInput: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: "#2D3748", borderWidth: 1, borderColor: "#C6F6D5" },
-  addButton: { backgroundColor: "#38A169", borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10 },
-  addButtonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 15 },
-  itemCard: { backgroundColor: "#FFFFFF", borderRadius: 8, marginBottom: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  itemDone: { opacity: 0.6 },
-  itemRow: { flexDirection: "row", alignItems: "center", padding: 10, gap: 6 },
-  checkbox: { padding: 4 },
-  checkboxInner: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: "#CBD5E0", alignItems: "center", justifyContent: "center" },
-  checkboxChecked: { backgroundColor: "#38A169", borderColor: "#38A169" },
-  checkmark: { color: "#FFFFFF", fontSize: 14, fontWeight: "bold" },
-  itemEmoji: { fontSize: 18 },
-  itemInfo: { flex: 1 },
-  itemText: { fontSize: 14, fontWeight: "500", color: "#2D3748" },
-  itemTextDone: { textDecorationLine: "line-through", color: "#A0AEC0" },
-  itemDate: { fontSize: 11, color: "#718096", marginTop: 2 },
+  container: { flex: 1, backgroundColor: "#EBF8FF" },
+  header: { flexDirection: "row", alignItems: "center", padding: 20, gap: 12 },
+  title: { fontSize: 24, fontWeight: "bold", color: "#2A4365" },
+  subtitle: { fontSize: 13, color: "#718096" },
+  addBtn: { backgroundColor: "#3182CE", borderRadius: 20, width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  section: { paddingHorizontal: 16, marginTop: 16 },
+  sectionHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: "bold", color: "#2A4365" },
+  countBadge: { backgroundColor: "#BEE3F8", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  countBadgeText: { fontSize: 13, color: "#2A4365", fontWeight: "600" },
+  activityCard: { backgroundColor: "#FFFFFF", borderRadius: 10, padding: 14, marginBottom: 10, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  nextCard: { borderWidth: 2, borderColor: "#ECC94B", backgroundColor: "#FFFFF0" },
+  activityHeader: { flexDirection: "row", justifyContent: "space-between" },
+  activityInfo: { flexDirection: "row", gap: 10, flex: 1, alignItems: "center" },
+  activityTitle: { fontSize: 15, fontWeight: "bold", color: "#2D3748" },
+  doneText: { textDecorationLine: "line-through", color: "#A0AEC0" },
+  activityDate: { fontSize: 12, color: "#718096" },
+  activityActions: { flexDirection: "row", alignItems: "center", gap: 4 },
   iconBtn: { padding: 4 },
-  detailsSection: { backgroundColor: "#F0FFF4", padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: "#C6F6D5" },
-  detailLabel: { fontSize: 13, fontWeight: "500", color: "#276749" },
-  detailInput: { backgroundColor: "#FFFFFF", borderRadius: 6, borderWidth: 1, borderColor: "#C6F6D5", paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: "#2D3748" },
-  emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
-  emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#276749" },
-  emptySubtitle: { fontSize: 14, color: "#38A169", textAlign: "center", maxWidth: 280 },
+  nextUpBadge: { backgroundColor: "#ECC94B", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  nextUpText: { fontSize: 11, fontWeight: "bold", color: "#744210" },
+  expandedContent: { marginTop: 12, gap: 10 },
+  detailLabel: { fontSize: 13, fontWeight: "bold", color: "#2D3748", marginBottom: 2 },
+  detailText: { fontSize: 13, color: "#4A5568" },
+  badge: { backgroundColor: "#EDF2F7", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  nextBadge: { backgroundColor: "#FEFCBF" },
+  badgeText: { fontSize: 11, color: "#4A5568" },
+  nextBadgeText: { color: "#744210" },
+  completeButton: { backgroundColor: "#38A169", borderRadius: 8, padding: 10, alignItems: "center" },
+  completeButtonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 13 },
+  pastToggle: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8 },
+  pastToggleText: { fontSize: 14, color: "#718096" },
+  emptyState: { alignItems: "center", paddingVertical: 40 },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#2A4365" },
+  emptySubtitle: { fontSize: 13, color: "#718096", textAlign: "center", maxWidth: 260, marginTop: 4 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 20 },
+  modalContent: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 20 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: "bold", color: "#2D3748" },
+  modalInput: { backgroundColor: "#F7FAFC", borderRadius: 8, padding: 12, fontSize: 14, color: "#2D3748", borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 10 },
+  categorySelector: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#F7FAFC", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 10 },
+  categorySelectorText: { fontSize: 14, color: "#2D3748" },
+  categoryPickerList: { maxHeight: 200, backgroundColor: "#F7FAFC", borderRadius: 8, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 10 },
+  categoryOption: { padding: 12, borderBottomWidth: 1, borderBottomColor: "#EDF2F7" },
+  categoryOptionActive: { backgroundColor: "#EBF8FF" },
+  categoryOptionText: { fontSize: 14, color: "#2D3748" },
+  modalActions: { gap: 8, marginTop: 8 },
+  modalAddBtn: { backgroundColor: "#3182CE", borderRadius: 8, padding: 14, alignItems: "center" },
+  modalAddBtnText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 15 },
+  modalCancelBtn: { padding: 10, alignItems: "center" },
+  modalCancelBtnText: { color: "#718096", fontSize: 14 },
 });
