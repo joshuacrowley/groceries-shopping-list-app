@@ -129,8 +129,8 @@ Work through templates one at a time. After each commit, move to the next unchec
 
 ### Port new templates
 
-7. [ ] `AfterSchoolRoutine`
-8. [ ] `Beach`
+7. [x] `AfterSchoolRoutine`
+8. [x] `Beach`
 9. [ ] `BirthdayTracker`
 10. [ ] `CarMaintenance`
 11. [ ] `ChildTemperatureTracker`
