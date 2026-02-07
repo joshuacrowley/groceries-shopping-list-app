@@ -1,22 +1,9 @@
 import React, { useState, useCallback, useMemo, memo } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  TextInput,
-  Alert,
-} from "react-native";
-import {
-  useStore,
-  useLocalRowIds,
-  useRow,
-  useDelRowCallback,
-  useAddRowCallback,
-} from "tinybase/ui-react";
+import { View, Text, TextInput, Pressable, ScrollView, Alert, StyleSheet } from "react-native";
+import { useStore, useLocalRowIds, useRow, useSetRowCallback, useDelRowCallback, useAddRowCallback } from "tinybase/ui-react";
 import { Trash, CaretDown, CaretUp, CreditCard } from "phosphor-react-native";
 
+const TYPES = ["Monthly", "Yearly", "Weekly", "Daily"];
 const FREQUENCIES: Record<string, number> = {
   Monthly: 12,
   Yearly: 1,
@@ -32,62 +19,67 @@ const SubscriptionItem = memo(({ id }: { id: string }) => {
 
   if (!itemData) return null;
 
-  const isDone = Boolean(itemData.done);
-  const amount = Number(itemData.amount || 0);
-  const freq = String(itemData.category || "Monthly");
-  const annualCost = amount * (FREQUENCIES[freq] || 12);
-
-  const handleToggle = () => store?.setCell("todos", id, "done", !isDone);
   const handleDelete = () => {
-    Alert.alert("Delete", "Remove this subscription?", [
+    Alert.alert("Delete", "Delete this subscription?", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: deleteItem },
     ]);
   };
 
+  const typeIndex = parseInt(itemData.type as string) - 1;
+  const typeLabel = TYPES[typeIndex] || "Monthly";
+  const amount = typeof itemData.amount === "number" ? itemData.amount : 0;
+
   return (
-    <View style={[styles.itemCard, isDone && styles.itemDone]}>
-      <View style={styles.itemRow}>
-        <Pressable onPress={handleToggle} style={styles.checkbox}>
-          <View style={[styles.checkboxInner, isDone && styles.checkboxChecked]}>
-            {isDone && <Text style={styles.checkmark}>✓</Text>}
-          </View>
-        </Pressable>
-        <Text style={styles.itemEmoji}>{String(itemData.emoji || "💳")}</Text>
-        <View style={styles.itemInfo}>
-          <Text style={[styles.itemText, isDone && styles.itemTextDone]} numberOfLines={1}>{String(itemData.text || "")}</Text>
-          <Text style={styles.itemFreq}>{freq} · ${amount.toFixed(2)}</Text>
+    <View style={styles.subCard}>
+      <Pressable onPress={() => setExpanded(!expanded)} style={styles.subHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.subName}>{itemData.text as string}</Text>
         </View>
-        <Text style={styles.annualCost}>${annualCost.toFixed(0)}/yr</Text>
-        <Pressable onPress={() => setExpanded(!expanded)} style={styles.iconBtn}>
-          {expanded ? <CaretUp size={16} color="#3182CE" /> : <CaretDown size={16} color="#3182CE" />}
-        </Pressable>
-        <Pressable onPress={handleDelete} style={styles.iconBtn}>
-          <Trash size={16} color="#E53E3E" />
-        </Pressable>
-      </View>
+        <View style={styles.subRight}>
+          <View style={styles.typeBadge}>
+            <Text style={styles.typeBadgeText}>{typeLabel}</Text>
+          </View>
+          <Text style={styles.subAmount}>${amount.toFixed(2)}</Text>
+          {expanded ? <CaretUp size={18} color="#718096" /> : <CaretDown size={18} color="#718096" />}
+        </View>
+      </Pressable>
       {expanded && (
-        <View style={styles.detailsSection}>
-          <Text style={styles.detailLabel}>Amount:</Text>
-          <TextInput style={styles.detailInput} value={String(amount)}
-            onChangeText={(t) => store?.setCell("todos", id, "amount", parseFloat(t) || 0)}
-            keyboardType="decimal-pad" />
-          <Text style={styles.detailLabel}>Frequency:</Text>
-          <View style={styles.chipRow}>
-            {Object.keys(FREQUENCIES).map((f) => (
-              <Pressable key={f} onPress={() => store?.setCell("todos", id, "category", f)}
-                style={[styles.chip, freq === f && styles.chipActive]}>
-                <Text style={[styles.chipText, freq === f && styles.chipTextActive]}>{f}</Text>
+        <View style={styles.expandedContent}>
+          <Text style={styles.fieldLabel}>Name</Text>
+          <TextInput
+            style={styles.editInput}
+            value={itemData.text as string}
+            onChangeText={(t) => store?.setCell("todos", id, "text", t)}
+          />
+          <Text style={styles.fieldLabel}>Billing Period</Text>
+          <View style={styles.typeOptions}>
+            {TYPES.map((type, index) => (
+              <Pressable
+                key={type}
+                style={[styles.typeOption, parseInt(itemData.type as string) === index + 1 && styles.typeOptionActive]}
+                onPress={() => store?.setCell("todos", id, "type", String(index + 1))}
+              >
+                <Text style={[styles.typeOptionText, parseInt(itemData.type as string) === index + 1 && styles.typeOptionActiveText]}>
+                  {type}
+                </Text>
               </Pressable>
             ))}
           </View>
-          <Text style={styles.detailLabel}>Renewal Date:</Text>
-          <TextInput style={styles.detailInput} value={String(itemData.date || "")}
-            onChangeText={(t) => store?.setCell("todos", id, "date", t)} placeholder="YYYY-MM-DD" placeholderTextColor="#A0AEC0" />
-          <Text style={styles.detailLabel}>Notes:</Text>
-          <TextInput style={[styles.detailInput, { minHeight: 50, textAlignVertical: "top" }]}
-            value={String(itemData.notes || "")} onChangeText={(t) => store?.setCell("todos", id, "notes", t)}
-            placeholder="Account details..." placeholderTextColor="#A0AEC0" multiline />
+          <Text style={styles.fieldLabel}>Amount ($)</Text>
+          <TextInput
+            style={styles.editInput}
+            value={String(amount)}
+            onChangeText={(t) => {
+              const parsed = parseFloat(t);
+              if (!isNaN(parsed)) store?.setCell("todos", id, "amount", parsed);
+            }}
+            keyboardType="decimal-pad"
+          />
+          <Pressable onPress={handleDelete} style={styles.deleteButton}>
+            <Trash size={16} color="#FFFFFF" />
+            <Text style={styles.deleteButtonText}>Delete</Text>
+          </Pressable>
         </View>
       )}
     </View>
@@ -96,118 +88,180 @@ const SubscriptionItem = memo(({ id }: { id: string }) => {
 SubscriptionItem.displayName = "SubscriptionItem";
 
 export default function SubscriptionTracker({ listId }: { listId: string }) {
-  const [newSub, setNewSub] = useState("");
-  const store = useStore();
-  const todoIds = useLocalRowIds("todoList", listId) || [];
-  const listData = useRow("lists", listId);
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState("1");
+  const [newAmount, setNewAmount] = useState("");
+  const [totalInterval, setTotalInterval] = useState("Monthly");
 
-  const addSub = useAddRowCallback(
+  const store = useStore();
+  const itemIds = useLocalRowIds("todoList", listId) || [];
+
+  const addItem = useAddRowCallback(
     "todos",
-    (text: string) => ({
-      text: text.trim(),
-      amount: 0,
-      category: "Monthly",
-      emoji: "💳",
+    (data: any) => ({
+      text: data.text.trim(),
+      type: data.type,
+      amount: data.amount,
       list: listId,
       done: false,
-      date: "",
-      notes: "",
     }),
-    [listId],
-    undefined,
-    (rowId) => { if (rowId) setNewSub(""); }
+    [listId]
   );
 
   const handleAdd = useCallback(() => {
-    if (newSub.trim()) addSub(newSub);
-  }, [addSub, newSub]);
+    if (newName.trim()) {
+      addItem({ text: newName, type: newType, amount: parseFloat(newAmount) || 0 });
+      setNewName("");
+      setNewAmount("");
+      setNewType("1");
+    }
+  }, [addItem, newName, newType, newAmount]);
 
   const totalMonthly = useMemo(() => {
-    return todoIds.reduce((sum, id) => {
-      if (store?.getCell("todos", id, "done")) return sum;
-      const amount = Number(store?.getCell("todos", id, "amount") || 0);
-      const freq = String(store?.getCell("todos", id, "category") || "Monthly");
-      const monthly = (amount * (FREQUENCIES[freq] || 12)) / 12;
-      return sum + monthly;
-    }, 0);
-  }, [todoIds, store]);
+    let total = 0;
+    itemIds.forEach((id) => {
+      const item = store?.getRow("todos", id);
+      if (!item) return;
+      const freq = FREQUENCIES[TYPES[parseInt(item.type as string) - 1]] || 12;
+      total += ((item.amount as number) * freq) / 12;
+    });
+    return total;
+  }, [itemIds, store]);
+
+  const getTotalForInterval = (interval: string) => {
+    const multiplier = (FREQUENCIES[interval] || 12) / 12;
+    return totalMonthly * multiplier;
+  };
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <CreditCard size={26} color="#3182CE" weight="fill" />
-            <View>
-              <Text style={styles.listTitle}>{String(listData?.name || "Subscriptions")}</Text>
-              <Text style={styles.progressLabel}>Track your recurring costs 💸</Text>
-            </View>
-          </View>
-          <View style={styles.totalBadge}>
-            <Text style={styles.totalBadgeText}>${totalMonthly.toFixed(0)}/mo</Text>
-          </View>
+      <View style={styles.header}>
+        <CreditCard size={28} color="#6B46C1" weight="fill" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Subscription Tracker</Text>
+          <Text style={styles.subtitle}>
+            {itemIds.length === 0 ? "Track your subscriptions! 💳" : `${itemIds.length} subscriptions`}
+          </Text>
         </View>
-
-        <View style={styles.addRow}>
-          <TextInput style={styles.addInput} value={newSub} onChangeText={setNewSub}
-            placeholder="Add subscription..." placeholderTextColor="#A0AEC0"
-            onSubmitEditing={handleAdd} returnKeyType="done" />
-          <Pressable onPress={handleAdd} style={styles.addButton}>
-            <Text style={styles.addButtonText}>Add</Text>
-          </Pressable>
-        </View>
-
-        {todoIds.map((id) => <SubscriptionItem key={id} id={id} />)}
-
-        {todoIds.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>💳</Text>
-            <Text style={styles.emptyTitle}>No subscriptions tracked</Text>
-            <Text style={styles.emptySubtitle}>Add your recurring subscriptions to see where your money goes</Text>
-          </View>
-        )}
       </View>
+
+      {/* Add Form */}
+      <View style={styles.addForm}>
+        <TextInput
+          style={styles.input}
+          value={newName}
+          onChangeText={setNewName}
+          placeholder="Product name"
+          placeholderTextColor="#A0AEC0"
+        />
+        <View style={styles.typeOptions}>
+          {TYPES.map((type, index) => (
+            <Pressable
+              key={type}
+              style={[styles.typeOption, newType === String(index + 1) && styles.typeOptionActive]}
+              onPress={() => setNewType(String(index + 1))}
+            >
+              <Text style={[styles.typeOptionText, newType === String(index + 1) && styles.typeOptionActiveText]}>
+                {type}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <TextInput
+          style={styles.input}
+          value={newAmount}
+          onChangeText={setNewAmount}
+          placeholder="$ Amount"
+          placeholderTextColor="#A0AEC0"
+          keyboardType="decimal-pad"
+        />
+        <Pressable onPress={handleAdd} style={styles.addButton}>
+          <Text style={styles.addButtonText}>Add Subscription</Text>
+        </Pressable>
+      </View>
+
+      {/* Subscriptions List */}
+      <View style={styles.listSection}>
+        {itemIds.map((id) => (
+          <SubscriptionItem key={id} id={id} />
+        ))}
+      </View>
+
+      {/* Empty State */}
+      {itemIds.length === 0 && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyEmoji}>💳</Text>
+          <Text style={styles.emptyTitle}>No subscriptions tracked</Text>
+          <Text style={styles.emptySubtitle}>Add your subscriptions to keep on top of recurring costs</Text>
+        </View>
+      )}
+
+      {/* Totals */}
+      <View style={styles.totalCard}>
+        <View style={styles.totalHeader}>
+          <Text style={styles.totalLabel}>Total:</Text>
+          <View style={styles.intervalOptions}>
+            {Object.keys(FREQUENCIES).map((interval) => (
+              <Pressable
+                key={interval}
+                style={[styles.intervalOption, totalInterval === interval && styles.intervalOptionActive]}
+                onPress={() => setTotalInterval(interval)}
+              >
+                <Text style={[styles.intervalOptionText, totalInterval === interval && styles.intervalOptionActiveText]}>
+                  {interval}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+        <Text style={styles.totalAmount}>${getTotalForInterval(totalInterval).toFixed(2)}</Text>
+        <Text style={styles.totalPeriod}>Per {totalInterval}</Text>
+      </View>
+
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#EBF8FF" },
-  content: { padding: 16 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  listTitle: { fontSize: 20, fontWeight: "bold", color: "#2A4365" },
-  progressLabel: { fontSize: 12, color: "#3182CE", marginTop: 2 },
-  totalBadge: { backgroundColor: "#BEE3F8", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  totalBadgeText: { fontSize: 15, fontWeight: "bold", color: "#2A4365" },
-  addRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  addInput: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: "#2D3748", borderWidth: 1, borderColor: "#BEE3F8" },
-  addButton: { backgroundColor: "#3182CE", borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10 },
-  addButtonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 15 },
-  itemCard: { backgroundColor: "#FFFFFF", borderRadius: 8, marginBottom: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  itemDone: { opacity: 0.55 },
-  itemRow: { flexDirection: "row", alignItems: "center", padding: 10, gap: 8 },
-  checkbox: { padding: 4 },
-  checkboxInner: { width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: "#CBD5E0", alignItems: "center", justifyContent: "center" },
-  checkboxChecked: { backgroundColor: "#3182CE", borderColor: "#3182CE" },
-  checkmark: { color: "#FFFFFF", fontSize: 14, fontWeight: "bold" },
-  itemEmoji: { fontSize: 20 },
-  itemInfo: { flex: 1 },
-  itemText: { fontSize: 14, fontWeight: "600", color: "#2D3748" },
-  itemTextDone: { textDecorationLine: "line-through", color: "#A0AEC0" },
-  itemFreq: { fontSize: 11, color: "#718096", marginTop: 2 },
-  annualCost: { fontSize: 12, fontWeight: "600", color: "#3182CE" },
-  iconBtn: { padding: 4 },
-  detailsSection: { backgroundColor: "#EBF8FF", padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: "#BEE3F8" },
-  detailLabel: { fontSize: 13, fontWeight: "500", color: "#2A4365" },
-  detailInput: { backgroundColor: "#FFFFFF", borderRadius: 6, borderWidth: 1, borderColor: "#BEE3F8", paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, color: "#2D3748" },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: "#EDF2F7" },
-  chipActive: { backgroundColor: "#3182CE" },
-  chipText: { fontSize: 12, color: "#4A5568" },
-  chipTextActive: { color: "#FFFFFF", fontWeight: "600" },
-  emptyState: { alignItems: "center", paddingVertical: 40, gap: 8 },
-  emptyEmoji: { fontSize: 48 },
-  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#2A4365" },
-  emptySubtitle: { fontSize: 14, color: "#3182CE", textAlign: "center", maxWidth: 280 },
+  container: { flex: 1, backgroundColor: "#FAF5FF" },
+  header: { flexDirection: "row", alignItems: "center", padding: 20, gap: 12 },
+  title: { fontSize: 22, fontWeight: "bold", color: "#553C9A" },
+  subtitle: { fontSize: 13, color: "#805AD5" },
+  addForm: { paddingHorizontal: 16, gap: 8 },
+  input: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 12, fontSize: 14, color: "#2D3748", borderWidth: 1, borderColor: "#E9D8FD" },
+  typeOptions: { flexDirection: "row", gap: 6 },
+  typeOption: { flex: 1, backgroundColor: "#FFFFFF", borderRadius: 8, paddingVertical: 10, alignItems: "center", borderWidth: 1, borderColor: "#E9D8FD" },
+  typeOptionActive: { backgroundColor: "#805AD5", borderColor: "#805AD5" },
+  typeOptionText: { fontSize: 12, color: "#553C9A", fontWeight: "600" },
+  typeOptionActiveText: { color: "#FFFFFF" },
+  addButton: { backgroundColor: "#805AD5", borderRadius: 8, padding: 14, alignItems: "center" },
+  addButtonText: { color: "#FFFFFF", fontWeight: "bold", fontSize: 15 },
+  listSection: { paddingHorizontal: 16, marginTop: 16 },
+  subCard: { backgroundColor: "#FFFFFF", borderRadius: 10, marginBottom: 8, overflow: "hidden", borderWidth: 1, borderColor: "#E9D8FD" },
+  subHeader: { flexDirection: "row", alignItems: "center", padding: 14 },
+  subName: { fontSize: 15, fontWeight: "bold", color: "#2D3748" },
+  subRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  typeBadge: { backgroundColor: "#E9D8FD", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  typeBadgeText: { fontSize: 11, color: "#553C9A", fontWeight: "600" },
+  subAmount: { fontSize: 15, fontWeight: "bold", color: "#2D3748" },
+  expandedContent: { padding: 14, paddingTop: 0, gap: 8 },
+  fieldLabel: { fontSize: 12, fontWeight: "600", color: "#4A5568", marginTop: 4 },
+  editInput: { backgroundColor: "#F7FAFC", borderRadius: 8, padding: 10, fontSize: 14, color: "#2D3748", borderWidth: 1, borderColor: "#E2E8F0" },
+  deleteButton: { flexDirection: "row", backgroundColor: "#E53E3E", borderRadius: 8, padding: 10, alignItems: "center", justifyContent: "center", gap: 6, marginTop: 4 },
+  deleteButtonText: { color: "#FFFFFF", fontWeight: "600", fontSize: 13 },
+  emptyState: { alignItems: "center", paddingVertical: 40 },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#553C9A" },
+  emptySubtitle: { fontSize: 13, color: "#805AD5", textAlign: "center", maxWidth: 260, marginTop: 4 },
+  totalCard: { marginHorizontal: 16, marginTop: 16, backgroundColor: "#E9D8FD", borderRadius: 12, padding: 16 },
+  totalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  totalLabel: { fontSize: 16, fontWeight: "bold", color: "#553C9A" },
+  intervalOptions: { flexDirection: "row", gap: 4 },
+  intervalOption: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: "#F3E8FF" },
+  intervalOptionActive: { backgroundColor: "#805AD5" },
+  intervalOptionText: { fontSize: 11, color: "#553C9A" },
+  intervalOptionActiveText: { color: "#FFFFFF" },
+  totalAmount: { fontSize: 28, fontWeight: "bold", color: "#553C9A", marginTop: 8 },
+  totalPeriod: { fontSize: 13, color: "#805AD5", marginTop: 2 },
 });
