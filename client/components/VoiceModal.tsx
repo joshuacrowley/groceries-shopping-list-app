@@ -14,10 +14,11 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { GoogleGenAI, Type } from '@google/genai';
-import Constants from 'expo-constants';
+import { Type } from '@google/genai';
 import { createChatContextGenerator } from '../app/api/chatContext';
 import PhosphorIcon from './PhosphorIcon';
+import { callGeminiProxy } from '@/lib/geminiProxy';
+import { useAuth } from '@clerk/clerk-expo';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { 
@@ -32,35 +33,19 @@ import { getUniqueId } from 'tinybase';
 
 const { height: screenHeight } = Dimensions.get('window');
 
-// Initialize Gemini with API key from environment
-const getGeminiAPI = () => {
-  const apiKey = Constants.expoConfig?.extra?.GOOGLE_AI_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Google AI API key not found. Please set EXPO_PUBLIC_GOOGLE_AI_API_KEY in your environment.");
-  }
-  
-  // Log the API endpoint being used (without the key)
-  console.log('[VoiceModal] Gemini API endpoint:', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent');
-  console.log('[VoiceModal] API Key present:', !!apiKey);
-  console.log('[VoiceModal] API Key length:', apiKey.length);
-  console.log('[VoiceModal] API Key prefix:', apiKey.substring(0, 8) + '...');
-  
-  return new GoogleGenAI({ apiKey });
-};
-
-// Call Gemini API directly for voice processing
+// Call Gemini API through server-side proxy for voice processing
 const callGeminiVoiceAPI = async (
   audioBase64: string,
   mimeType: string,
   contextData: any,
+  getToken: () => Promise<string | null>,
   modelName: string = 'gemini-2.5-flash-lite'
 ) => {
-  console.log("[VoiceModal] Initializing Gemini API for voice...");
-  console.log("[VoiceModal] Audio format:", mimeType);
-  console.log("[VoiceModal] Audio base64 length:", audioBase64.length);
-  console.log("[VoiceModal] Using model:", modelName);
-  
-  const genAI = getGeminiAPI();
+  if (__DEV__) {
+    console.log("[VoiceModal] Calling Gemini via server proxy for voice...");
+    console.log("[VoiceModal] Audio format:", mimeType);
+    console.log("[VoiceModal] Using model:", modelName);
+  }
 
   // Prepare context information using XML format
   const contextGenerator = createChatContextGenerator({
@@ -139,10 +124,11 @@ Examples:
 
 Remember: Always try to ANSWER THE QUESTION with specific information. Output ONLY valid JSON, nothing else.`;
 
-  console.log("[VoiceModal] Making request to Gemini API...");
-  console.log("[VoiceModal] Using model: gemini-2.5-flash-lite");
-  console.log("[VoiceModal] Context lists:", Object.keys(contextData?.lists || {}).length);
-  console.log("[VoiceModal] Context todos:", Object.keys(contextData?.todos || {}).length);
+  if (__DEV__) {
+    console.log("[VoiceModal] Making request to Gemini API via proxy...");
+    console.log("[VoiceModal] Context lists:", Object.keys(contextData?.lists || {}).length);
+    console.log("[VoiceModal] Context todos:", Object.keys(contextData?.todos || {}).length);
+  }
 
   try {
     // Define the response schema for structured output
@@ -276,51 +262,31 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
       propertyOrdering: ["transcription", "message", "action"]
     };
     
-    // Log the full request details
-    const requestData = {
-      model: modelName,
-      contents: [
-        {
-          parts: [
-            {
-              inlineData: {
-                mimeType: mimeType,
-                data: audioBase64, // Make sure this is base64 without the data URL prefix
-              }
-            },
-            { text: prompt }
-          ]
+    // Call through server proxy
+    const text = await callGeminiProxy(
+      {
+        model: modelName,
+        contents: [
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: audioBase64,
+            }
+          },
+          { text: prompt }
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: responseSchema
         }
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: responseSchema
-      }
-    };
+      },
+      getToken
+    );
     
-    console.log("[VoiceModal] Request structure:", JSON.stringify({
-      ...requestData,
-      contents: requestData.contents.map(content => ({
-        parts: content.parts.map((part, idx) => 
-          idx === 0 && part.inlineData 
-            ? { inlineData: { ...part.inlineData, data: part.inlineData.data.substring(0, 100) + '...(truncated)' } }
-            : part
-        )
-      }))
-    }, null, 2));
-    
-    // Make the actual request with the new API pattern
-    const response = await genAI.models.generateContent(requestData);
-
-    // Get the response text directly - it will be valid JSON due to structured output
-    const text = response.text;
-    
-    console.log("[VoiceModal] Gemini structured response:", text);
+    if (__DEV__) console.log("[VoiceModal] Gemini structured response:", text);
     
     // Parse the JSON response directly
     const parsedResponse = JSON.parse(text);
-    
-    console.log("[VoiceModal] Parsed response:", parsedResponse);
     
     // Return the structured response
     return {
@@ -329,27 +295,16 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
       action: parsedResponse.action || null
     };
 
-  } catch (error) {
-    console.error("[VoiceModal] Gemini API error:", error);
-    
-    // Log the full error object
-    console.error("[VoiceModal] Full error object:", JSON.stringify(error, null, 2));
-    
-    // Log specific error properties
-    if (error.response) {
-      console.error("[VoiceModal] Error response status:", error.response.status);
-      console.error("[VoiceModal] Error response headers:", error.response.headers);
-      console.error("[VoiceModal] Error response data:", error.response.data);
+  } catch (error: any) {
+    if (__DEV__) {
+      console.error("[VoiceModal] Gemini API error:", error);
+      console.error("[VoiceModal] Error details:", error.message || error);
     }
-    
-    // Log the specific error for debugging
-    console.error("[VoiceModal] Error details:", error.message || error);
-    console.error("[VoiceModal] Error stack:", error.stack);
     
     // Check for specific error types
     if (error.message?.includes('500')) {
       throw new Error('The AI service is temporarily unavailable. Please try again in a moment.');
-    } else if (error.message?.includes('API key')) {
+    } else if (error.message?.includes('API key') || error.message?.includes('configuration')) {
       throw new Error('There is an issue with the API configuration. Please contact support.');
     } else if (error.message?.includes('model')) {
       throw new Error('The AI model is not available. Please try again later.');
@@ -363,10 +318,10 @@ Remember: Always try to ANSWER THE QUESTION with specific information. Output ON
 const generateTodosWithStructuredOutput = async (
   todoTexts: string[],
   listInfo: any,
-  existingTodos: any[]
+  existingTodos: any[],
+  getToken: () => Promise<string | null>
 ) => {
-  console.log("[VoiceModal] Generating structured todos for list:", listInfo.name);
-  const genAI = getGeminiAPI();
+  if (__DEV__) console.log("[VoiceModal] Generating structured todos for list:", listInfo.name);
 
   // Define the response schema for structured output
   const responseSchema = {
@@ -467,29 +422,31 @@ const generateTodosWithStructuredOutput = async (
   ${JSON.stringify(existingTodos.slice(0, 5))}
   
   Create todo items for the following:
-  ${todoTexts.map((text, i) => `${i + 1}. ${text}`).join('\n')}
+  ${todoTexts.map((text: string, i: number) => `${i + 1}. ${text}`).join('\n')}
   
   IMPORTANT: Follow the system instructions exactly. Each list type has specific requirements for how todos should be formatted, what fields to include, and what style to use.
   
   Return ONLY the new todos, not the existing ones. Each todo should match the style and structure of the existing todos in the list.`;
 
   try {
-    const response = await genAI.models.generateContent({
-      model: 'gemini-2.5-flash-lite',
-      contents: [{ text: prompt }],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: responseSchema
-      }
-    });
+    const text = await callGeminiProxy(
+      {
+        model: 'gemini-2.5-flash-lite',
+        contents: [{ text: prompt }],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: responseSchema
+        }
+      },
+      getToken
+    );
 
-    const text = response.text;
     const parsedResponse = JSON.parse(text);
     
-    console.log("[VoiceModal] Generated todos:", parsedResponse.todos);
+    if (__DEV__) console.log("[VoiceModal] Generated todos:", parsedResponse.todos);
     return parsedResponse.todos;
   } catch (error) {
-    console.error("[VoiceModal] Error generating structured todos:", error);
+    if (__DEV__) console.error("[VoiceModal] Error generating structured todos:", error);
     throw error;
   }
 };
@@ -565,6 +522,9 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
   const textColor = useThemeColor({}, 'text');
   const iconColor = useThemeColor({}, 'icon');
 
+  // Auth for server proxy
+  const { getToken } = useAuth();
+
   // Store access
   const store = useStore();
 
@@ -590,10 +550,10 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
           shouldPlayInBackground: false,
         });
       } else {
-        console.error('[VoiceModal] Microphone permission denied');
+        if (__DEV__) console.error('[VoiceModal] Microphone permission denied');
       }
     } catch (error) {
-      console.error('[VoiceModal] Permission error:', error);
+      if (__DEV__) console.error('[VoiceModal] Permission error:', error);
       setHasPermission(false);
     }
   };
@@ -705,7 +665,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
 
   const startRecording = async () => {
     try {
-      console.log('[VoiceModal] Starting recording...');
+      if (__DEV__) console.log('[VoiceModal] Starting recording...');
       
       setIsInitializing(true);
       
@@ -726,10 +686,10 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
       setIsInitializing(false);
       setRecordingStartTime(Date.now());
       
-      console.log('[VoiceModal] Recording started successfully');
+      if (__DEV__) console.log('[VoiceModal] Recording started successfully');
       
     } catch (error) {
-      console.error('[VoiceModal] Recording start error:', error);
+      if (__DEV__) console.error('[VoiceModal] Recording start error:', error);
       setIsInitializing(false);
       setIsActivelyRecording(false);
       Alert.alert(
@@ -747,7 +707,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
       
       // Check minimum recording time
       const recordingDuration = recordingStartTime ? Date.now() - recordingStartTime : 0;
-      console.log('[VoiceModal] Recording duration:', recordingDuration, 'ms');
+      if (__DEV__) console.log('[VoiceModal] Recording duration:', recordingDuration, 'ms');
       
       if (recordingDuration < 500) { // Minimum 500ms recording
         Alert.alert(
@@ -758,24 +718,21 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
         return;
       }
       
-      console.log('[VoiceModal] Stopping recording...');
-      console.log('[VoiceModal] audioRecorder.isRecording:', audioRecorder.isRecording);
-      console.log('[VoiceModal] audioRecorder.uri before stop:', audioRecorder.uri);
+      if (__DEV__) console.log('[VoiceModal] Stopping recording...');
       
       await audioRecorder.stop();
       
       // Get the recording URI
       const recordingUri = audioRecorder.uri;
       
-      console.log('[VoiceModal] Recording stopped');
-      console.log('[VoiceModal] Recording URI:', recordingUri);
+      if (__DEV__) console.log('[VoiceModal] Recording stopped, URI:', recordingUri);
       
       if (recordingUri) {
-        console.log('[VoiceModal] Recording completed, URI:', recordingUri);
+        if (__DEV__) console.log('[VoiceModal] Recording completed, URI:', recordingUri);
         // Process the recording
         handleRecordingComplete(recordingUri);
       } else {
-        console.error('[VoiceModal] No recording URI available after stop');
+        if (__DEV__) console.error('[VoiceModal] No recording URI available after stop');
         Alert.alert(
           'Recording Error',
           'Failed to capture audio. Please try again.',
@@ -783,7 +740,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
         );
       }
     } catch (error) {
-      console.error('[VoiceModal] Recording stop error:', error);
+      if (__DEV__) console.error('[VoiceModal] Recording stop error:', error);
       Alert.alert(
         'Recording Error',
         'Failed to stop recording. Please try again.',
@@ -793,7 +750,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
   };
 
   const handleRecordingComplete = async (audioUri: string) => {
-    console.log('[VoiceModal] Starting to process audio:', audioUri);
+    if (__DEV__) console.log('[VoiceModal] Starting to process audio:', audioUri);
     
     try {
       setIsProcessing(true);
@@ -802,8 +759,10 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
       const response = await fetch(audioUri);
       const blob = await response.blob();
       
-      console.log('[VoiceModal] Audio blob type:', blob.type);
-      console.log('[VoiceModal] Audio blob size:', blob.size);
+      if (__DEV__) {
+        console.log('[VoiceModal] Audio blob type:', blob.type);
+        console.log('[VoiceModal] Audio blob size:', blob.size);
+      }
       
       // Check if the audio file is too large (Gemini has limits)
       if (blob.size > 10 * 1024 * 1024) { // 10MB limit
@@ -812,7 +771,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
       
       // Check if the audio is too small (likely corrupted)
       if (blob.size < 1000) { // Less than 1KB is suspicious
-        console.error('[VoiceModal] Audio file is too small, likely corrupted');
+        if (__DEV__) console.error('[VoiceModal] Audio file is too small, likely corrupted');
         throw new Error('Audio recording failed. Please try again.');
       }
       
@@ -822,8 +781,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
         try {
           const base64Audio = (reader.result as string).split(',')[1];
           
-          console.log('[VoiceModal] Audio base64 length:', base64Audio?.length);
-          console.log('[VoiceModal] Audio base64 preview:', base64Audio?.substring(0, 100) + '...');
+          if (__DEV__) console.log('[VoiceModal] Audio base64 length:', base64Audio?.length);
           
           // Ensure we have valid base64 data
           if (!base64Audio) {
@@ -843,21 +801,19 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
             mimeType = 'audio/m4a';
           }
           
-          console.log('[VoiceModal] Using MIME type:', mimeType);
+          if (__DEV__) console.log('[VoiceModal] Using MIME type:', mimeType);
           
-          // Log the actual prompt being sent
-          console.log('[VoiceModal] Sending audio with simplified prompt for testing');
-          
-          // Call Gemini API with structured output
+          // Call Gemini API via server proxy
           const result = await callGeminiVoiceAPI(
             base64Audio,
             mimeType,
-            contextData
+            contextData,
+            getToken
           );
           
           setResponse(result);
         } catch (innerError) {
-          console.error('[VoiceModal] Error in FileReader onloadend:', innerError);
+          if (__DEV__) console.error('[VoiceModal] Error in FileReader onloadend:', innerError);
           throw innerError;
         } finally {
           setIsProcessing(false);
@@ -865,14 +821,14 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
       };
       
       reader.onerror = (error) => {
-        console.error('[VoiceModal] FileReader error:', error);
+        if (__DEV__) console.error('[VoiceModal] FileReader error:', error);
         setIsProcessing(false);
         throw new Error('Failed to read audio file');
       };
       
       reader.readAsDataURL(blob);
     } catch (error) {
-      console.error('[VoiceModal] Voice processing error:', error);
+      if (__DEV__) console.error('[VoiceModal] Voice processing error:', error);
       
       // Show a more user-friendly error message
       const errorMessage = error.message?.includes('temporarily unavailable') 
@@ -901,7 +857,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
     
     // Validate that we have a valid target before navigating
     if (!action.target && (action.type === 'show_list' || action.type === 'show_items' || action.type === 'navigate')) {
-      console.error('[VoiceModal] No target specified for navigation action');
+      if (__DEV__) console.error('[VoiceModal] No target specified for navigation action');
       Alert.alert(
         'Navigation Error',
         'I couldn\'t determine which list to show. Please try again.',
@@ -954,31 +910,114 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
         }
         break;
       case 'update_todo':
-        Alert.alert(
-          'Update Todo',
-          `Would update todo ${action.data?.todoId}`,
-          [{ text: 'OK' }]
-        );
-        // TODO: Integrate with actual update_todo tool
+        if (action.data?.todoId) {
+          const todoId = action.data.todoId;
+          const existingTodo = store.getRow('todos', todoId);
+          if (existingTodo && Object.keys(existingTodo).length > 0) {
+            // Build partial update from provided fields
+            const updatedFields: Record<string, string | number | boolean> = {};
+            if (action.data.text) updatedFields.text = action.data.text;
+            if (action.data.todoText) updatedFields.text = action.data.todoText;
+            if (action.data.notes) updatedFields.notes = action.data.notes;
+            if (action.data.emoji) updatedFields.emoji = action.data.emoji;
+            if (action.data.category) updatedFields.category = action.data.category;
+            if (action.data.date) updatedFields.date = action.data.date;
+            if (action.data.time) updatedFields.time = action.data.time;
+            if (action.data.url) updatedFields.url = action.data.url;
+            if (action.data.email) updatedFields.email = action.data.email;
+            if (action.data.streetAddress) updatedFields.streetAddress = action.data.streetAddress;
+            if (action.data.number != null) updatedFields.number = action.data.number;
+            if (action.data.amount != null) updatedFields.amount = action.data.amount;
+            if (action.data.fiveStarRating != null) updatedFields.fiveStarRating = action.data.fiveStarRating;
+
+            if (Object.keys(updatedFields).length > 0) {
+              store.setPartialRow('todos', todoId, updatedFields);
+              if (__DEV__) console.log('[VoiceModal] Updated todo:', todoId, updatedFields);
+            }
+
+            onClose();
+            // Navigate to the list containing the todo
+            const listId = action.data.listId || existingTodo.list;
+            if (listId) {
+              router.push(`/(index)/list/${listId}`);
+            }
+          } else {
+            Alert.alert(
+              'Todo Not Found',
+              'The todo item could not be found. It may have been deleted.',
+              [{ text: 'OK' }]
+            );
+          }
+        } else {
+          Alert.alert(
+            'Update Error',
+            'No todo was specified to update.',
+            [{ text: 'OK' }]
+          );
+        }
         break;
       case 'delete_todo':
-        Alert.alert(
-          'Delete Todo',
-          `Would delete todo ${action.data?.todoId}`,
-          [{ text: 'OK' }]
-        );
-        // TODO: Integrate with actual delete_todo tool
+        if (action.data?.todoId) {
+          const deleteTodoId = action.data.todoId;
+          const todoToDelete = store.getRow('todos', deleteTodoId);
+          if (todoToDelete && Object.keys(todoToDelete).length > 0) {
+            const todoName = action.data.todoText || String(todoToDelete.text || 'this item');
+            Alert.alert(
+              'Delete Item',
+              `Are you sure you want to delete "${todoName}"?`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: () => {
+                    store.delRow('todos', deleteTodoId);
+                    if (__DEV__) console.log('[VoiceModal] Deleted todo:', deleteTodoId);
+                    onClose();
+                  },
+                },
+              ]
+            );
+          } else {
+            Alert.alert(
+              'Todo Not Found',
+              'The todo item could not be found. It may have already been deleted.',
+              [{ text: 'OK' }]
+            );
+          }
+        } else {
+          Alert.alert(
+            'Delete Error',
+            'No todo was specified to delete.',
+            [{ text: 'OK' }]
+          );
+        }
         break;
       case 'create_list':
-        Alert.alert(
-          'Create List',
-          `Would create list with template "${action.data?.template}"`,
-          [{ text: 'OK' }]
-        );
-        // TODO: Integrate with actual create_list tool
+        if (action.data?.name) {
+          const newListId = getUniqueId();
+          store.setRow('lists', newListId, {
+            name: action.data.name,
+            purpose: action.data.purpose || '',
+            icon: '📝',
+            backgroundColour: 'blue',
+            type: 'Info',
+            systemPrompt: '',
+            number: 0,
+            template: action.data.template || '',
+            code: '',
+          });
+          if (__DEV__) console.log('[VoiceModal] Created list:', newListId, action.data.name);
+          onClose();
+          router.push(`/(index)/list/${newListId}`);
+        } else {
+          // No name provided, navigate to the create flow
+          onClose();
+          router.push('/(index)/list/new/create');
+        }
         break;
       default:
-        console.warn('[VoiceModal] Unknown action type:', action.type);
+        if (__DEV__) console.warn('[VoiceModal] Unknown action type:', action.type);
         break;
     }
   };
@@ -1016,7 +1055,8 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
       const generatedTodos = await generateTodosWithStructuredOutput(
         texts,
         list,
-        existingTodos
+        existingTodos,
+        getToken
       );
       
       // Add todos to the store
@@ -1038,7 +1078,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
       setIsConfirmingTodos(false);
       
     } catch (error) {
-      console.error('[VoiceModal] Error creating todos:', error);
+      if (__DEV__) console.error('[VoiceModal] Error creating todos:', error);
       setTodoCreationError('Failed to create todos. Please try again.');
       setIsCreatingTodos(false);
     }
@@ -1105,7 +1145,7 @@ export default function VoiceModal({ visible, isRecording, onClose, contextData 
   
   // Debug component state changes only
   useEffect(() => {
-    if (visible || isActivelyRecording || isProcessing) {
+    if (__DEV__ && (visible || isActivelyRecording || isProcessing)) {
       console.log('[VoiceModal] State:', {
         visible,
         isListening,

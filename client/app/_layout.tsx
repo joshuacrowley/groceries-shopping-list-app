@@ -5,9 +5,9 @@ import { Slot } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { tokenCache } from "@/cache";
-import { useColorScheme } from "@/hooks/useColorScheme";
 import { ClerkLoaded, ClerkProvider } from "@clerk/clerk-expo";
 import { SystemBars } from "react-native-edge-to-edge";
+import { ThemeProvider } from "@/context/ThemeContext";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
@@ -15,7 +15,6 @@ const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
@@ -35,13 +34,15 @@ export default function RootLayout() {
   }
 
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <Slot />
-          <SystemBars style={"auto"} />
-        </GestureHandlerRootView>
-      </ClerkLoaded>
-    </ClerkProvider>
+    <ThemeProvider>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <ClerkLoaded>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <Slot />
+            <SystemBars style={"auto"} />
+          </GestureHandlerRootView>
+        </ClerkLoaded>
+      </ClerkProvider>
+    </ThemeProvider>
   );
 }

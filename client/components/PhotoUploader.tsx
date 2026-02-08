@@ -17,27 +17,19 @@ import {
   useRow,
 } from "tinybase/ui-react";
 import { chakraColors, spacing, radii } from '@/constants/Colors';
-import { GoogleGenAI, Type } from '@google/genai';
-import Constants from 'expo-constants';
+import { Type } from '@google/genai';
+import { callGeminiProxy } from '@/lib/geminiProxy';
+import { useAuth } from '@clerk/clerk-expo';
 
-// Initialize Gemini with API key from environment
-const getGeminiAPI = () => {
-  const apiKey = Constants.expoConfig?.extra?.GOOGLE_AI_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Google AI API key not found. Please set EXPO_PUBLIC_GOOGLE_AI_API_KEY in your environment.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
-
-// Call Gemini API directly
+// Call Gemini API through server proxy
 const callGeminiAPI = async (
   image: string,
   mimeType: string,
   listInfo: any,
-  currentTodos: any[]
+  currentTodos: any[],
+  getToken: () => Promise<string | null>
 ) => {
-  console.log("Initializing Gemini API...");
-  const genAI = getGeminiAPI();
+  console.log("Calling Gemini API via server proxy...");
 
   // Define the response schema for structured output
   const responseSchema = {
@@ -93,50 +85,51 @@ const callGeminiAPI = async (
   Generate relevant, specific, and contextual todo items that match the style and purpose of the current list.
   Please only provide the new todos, not the existing todos provided for context.`;
 
-  console.log("Making request to Gemini API...");
+  console.log("Making request to Gemini API via proxy...");
 
   try {
-    const contents = [
+    const text = await callGeminiProxy(
       {
-        inlineData: {
-          mimeType: mimeType,
-          data: image,
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: image,
+            }
+          },
+          { text: prompt }
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: responseSchema
         }
       },
-      { text: prompt }
-    ];
-
-    const response = await genAI.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: contents,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: responseSchema
-      }
-    });
-
-    // Get the response text directly - it will be valid JSON due to structured output
-    const text = response.text;
+      getToken
+    );
     
-    console.log("Gemini response received");
+    console.log("Gemini response received via proxy");
     console.log("Structured response:", text);
     
     // Parse the JSON response directly
     const parsedResponse = JSON.parse(text);
     return parsedResponse;
   } catch (error) {
-    console.error("Gemini API error:", error);
+    console.error("Gemini API proxy error:", error);
     throw error;
   }
 };
 
 interface PhotoUploaderProps {
   listId: string;
+  iconOnly?: boolean;
+  color?: string;
 }
 
-const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
+const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }) => {
   const [isUploading, setIsUploading] = useState(false);
   const store = useStore();
+  const { getToken } = useAuth();
 
   const list = useRow("lists", listId);
   const todoIds = useLocalRowIds("todoList", listId);
@@ -319,13 +312,13 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
         
         console.log("Calling Google Gemini API directly...");
         
-        // Call Google Gemini API directly instead of going through Expo Router API route
+        // Call Google Gemini API via server proxy
         const result = await callGeminiAPI(base64Image, mimeType, {
           name: list.name,
           purpose: list.purpose,
           template: list.template,
           systemPrompt: list.systemPrompt,
-        }, currentTodos);
+        }, currentTodos, getToken);
         
         if (result && result.todos) {
           console.log(`Generated ${result.todos.length} todos from image`);
@@ -365,6 +358,8 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
 
   // Show photo button on all platforms
 
+  const iconColor = color || chakraColors.gray[600];
+
   return (
     <Pressable
       style={[styles.button, isUploading && styles.buttonDisabled]}
@@ -372,18 +367,20 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId }) => {
       disabled={isUploading}
     >
       {isUploading ? (
-        <ActivityIndicator size="small" color={chakraColors.gray[600]} />
+        <ActivityIndicator size="small" color={iconColor} />
       ) : (
         <PhosphorIcon 
           name="Camera" 
-          size={18} 
-          color={chakraColors.gray[600]} 
+          size={iconOnly ? 22 : 18} 
+          color={iconColor} 
           weight="regular"
         />
       )}
-      <Text style={[styles.buttonText, isUploading && styles.buttonTextDisabled]}>
-        {isUploading ? "Processing..." : "Photo"}
-      </Text>
+      {!iconOnly && (
+        <Text style={[styles.buttonText, isUploading && styles.buttonTextDisabled, color && { color }]}>
+          {isUploading ? "Processing..." : "Photo"}
+        </Text>
+      )}
     </Pressable>
   );
 };

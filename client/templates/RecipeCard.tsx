@@ -162,7 +162,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ visible, onClose, onAdd }) 
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>

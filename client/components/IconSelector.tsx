@@ -98,7 +98,7 @@ const IconSelector: React.FC<IconSelectorProps> = ({
   return (
     <Modal
       visible={isOpen}
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       onRequestClose={onClose}
     >

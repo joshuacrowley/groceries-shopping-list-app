@@ -13,6 +13,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.joshuacrowley.tinytalkingtodos",
       "appleTeamId": "L58BK45YGQ",
+      "usesAppleSignIn": true,
       "icon": {
         "light": "./assets/images/adaptive-icon.png",
         "dark": "./assets/images/icon-dark.png",
@@ -61,7 +62,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan QR codes"
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan documents or data to add to your lists."
         }
       ],
       [
@@ -82,7 +83,8 @@
         {
           "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for voice commands."
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

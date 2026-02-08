@@ -2,20 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator, ScrollView, SafeAreaView, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import PhosphorIcon from '@/components/PhosphorIcon';
-import Constants from 'expo-constants';
 import catalogue from '../../../../catalogue.json';
 import { useStore } from 'tinybase/ui-react';
 import { getUniqueId } from 'tinybase';
-import { GoogleGenAI, Type } from '@google/genai';
-
-// Initialize Gemini with API key from environment
-const getGeminiAPI = () => {
-  const apiKey = Constants.expoConfig?.extra?.GOOGLE_AI_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Google AI API key not found. Please set EXPO_PUBLIC_GOOGLE_AI_API_KEY in your environment.");
-  }
-  return new GoogleGenAI({ apiKey });
-};
+import { Type } from '@google/genai';
+import { callGeminiProxy } from '@/lib/geminiProxy';
+import { useAuth } from '@clerk/clerk-expo';
 
 // Helper function to get available templates
 const getAvailableTemplates = () => {
@@ -59,6 +51,7 @@ export default function PhotoAnalysisScreen() {
   const mimeType = params.mimeType as string || 'image/jpeg';
   
   const store = useStore();
+  const { getToken } = useAuth();
 
   const [isAnalyzing, setIsAnalyzing] = useState(true);
   const [analysis, setAnalysis] = useState<string>('');
@@ -136,18 +129,8 @@ export default function PhotoAnalysisScreen() {
     }
 
     try {
-      console.log('Starting photo analysis with direct Gemini call...');
+      console.log('Starting photo analysis via server proxy...');
       console.log('Using model: gemini-2.5-flash');
-      
-      // Add polyfill for React Native if needed
-      if (typeof global.process === 'undefined') {
-        global.process = {
-          env: {},
-          version: '',
-        } as any;
-      }
-      
-      const genAI = getGeminiAPI();
 
       const availableTemplates = getAvailableTemplates();
       
@@ -213,35 +196,33 @@ ANALYSIS INSTRUCTIONS:
 
 Focus on practical utility - choose templates that would actually help the user organize the content they photographed.`;
 
-      console.log('Calling Gemini API...');
+      console.log('Calling Gemini API via proxy...');
       console.log('Image data length:', dataToAnalyze.length);
       
-      const contents = [
-        { 
-          inlineData: { 
-            mimeType: mimeType, 
-            data: dataToAnalyze 
-          } 
+      const text = await callGeminiProxy(
+        {
+          model: 'gemini-2.5-flash',
+          contents: [
+            { 
+              inlineData: { 
+                mimeType: mimeType, 
+                data: dataToAnalyze 
+              } 
+            },
+            { text: prompt }
+          ],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: responseSchema
+          }
         },
-        { text: prompt }
-      ];
-
-      const response = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: contents,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: responseSchema
-        }
-      });
-
-      // Get the response text directly - it will be valid JSON due to structured output
-      const text = response.text;
+        getToken
+      );
       
-      console.log('Gemini response received');
+      console.log('Gemini response received via proxy');
       console.log('Structured response:', text);
       
-      // Parse the JSON response - no need to extract from markdown blocks
+      // Parse the JSON response
       const parsedResponse = JSON.parse(text);
       
       // Validate and enrich the suggestions with full template data
@@ -284,107 +265,14 @@ Focus on practical utility - choose templates that would actually help the user 
       console.error('Error details:', {
         message: error.message,
         name: error.name,
-        stack: error.stack
       });
-      
-      // Check if it's a network error from the SDK
-      if (error.message?.includes('Network request failed')) {
-        console.log('SDK network error detected, trying direct API call...');
-        
-        // Fallback to direct API call
-        try {
-          const apiKey = Constants.expoConfig?.extra?.GOOGLE_AI_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY;
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-          
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: mimeType,
-                      data: dataToAnalyze
-                    }
-                  },
-                  {
-                    text: prompt
-                  }
-                ]
-              }],
-              generationConfig: {
-                temperature: 0.7,
-                topK: 1,
-                topP: 1,
-                maxOutputTokens: 2048,
-              },
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error(`API request failed: ${response.status}`);
-          }
-
-          const data = await response.json();
-          const text = data.candidates[0]?.content?.parts[0]?.text;
-          
-          if (text) {
-            // Process the response as before
-            try {
-              const parsedResponse = JSON.parse(text);
-              
-              // Validate and enrich the suggestions with full template data
-              const enrichedSuggestions = parsedResponse.suggestedTemplates
-                .map((suggestion: any) => {
-                  const template = availableTemplates.find(t => t.name === suggestion.templateId);
-                  if (!template) return null;
-                  
-                  const fullTemplate = catalogue.find(item => item.template === suggestion.templateId);
-                  
-                  return {
-                    ...suggestion,
-                    templateData: fullTemplate ? {
-                      id: fullTemplate.template,
-                      name: fullTemplate.name || template.label,
-                      purpose: fullTemplate.purpose || template.description,
-                      type: fullTemplate.type || 'General',
-                      icon: fullTemplate.icon || '📝',
-                      backgroundColour: fullTemplate.backgroundColour || 'blue'
-                    } : {
-                      id: template.name,
-                      name: template.label,
-                      purpose: template.description,
-                      type: 'General',
-                      icon: '📝',
-                      backgroundColour: 'blue'
-                    }
-                  };
-                })
-                .filter(Boolean)
-                .slice(0, 3);
-
-              setAnalysis(parsedResponse.analysis);
-              setSuggestions(enrichedSuggestions);
-              setIsAnalyzing(false);
-              return; // Success with fallback
-            } catch (parseError) {
-              console.error('Failed to parse fallback response:', parseError);
-            }
-          }
-        } catch (fallbackError) {
-          console.error('Fallback API call also failed:', fallbackError);
-        }
-      }
       
       let errorMessage = 'Failed to analyze photo. Please try again.';
       
       if (error.message?.includes('timeout')) {
         errorMessage = 'Request timed out. Please try again.';
-      } else if (error.message?.includes('API key')) {
-        errorMessage = 'API configuration error. Please check your settings.';
+      } else if (error.message?.includes('Authentication')) {
+        errorMessage = 'Please sign in to use AI features.';
       }
       
       setError(errorMessage);
@@ -402,7 +290,7 @@ Focus on practical utility - choose templates that would actually help the user 
           confidence: 70 - (index * 10),
           reasoning: `${template.name} is a versatile template for ${template.description}`,
           suggestedName: "My Photo List",
-          suggestedIcon: '📝', // Default icon for fallback
+          suggestedIcon: '📝',
           templateData: fullTemplate ? {
             id: fullTemplate.template,
             name: fullTemplate.name || template.label,

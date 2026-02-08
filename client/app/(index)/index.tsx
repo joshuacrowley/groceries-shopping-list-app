@@ -1,17 +1,15 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAreaView, ScrollView, StatusBar, Animated, Dimensions } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAreaView, StatusBar, Animated, Dimensions } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { useStore, useRowIds, useAddRowCallback, useRow } from 'tinybase/ui-react';
+import { useStore, useRowIds, useAddRowCallback } from 'tinybase/ui-react';
 import { useOrganization, useAuth, useUser, useClerk } from '@clerk/clerk-expo';
-import TodoList from '@/Basic';
-import ListItem from '@/components/ListItem';
 import ListCard, { CARD_WIDTH, CARD_MARGIN } from '@/components/ListCard';
 import VoiceModal from '@/components/VoiceModal';
 import ListCreationOptionsModal from '@/components/ListCreationOptionsModal';
+import BottomSheet from '@/components/BottomSheet';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 import { LIST_TYPE } from '@/stores/schema';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -19,12 +17,12 @@ import * as Haptics from 'expo-haptics';
 
 export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedListId, setSelectedListId] = useState(null);
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'name' | 'todos'>('name');
+  const [filterDrawerVisible, setFilterDrawerVisible] = useState(false);
   const { organization } = useOrganization();
   const { isSignedIn } = useAuth();
   const { user } = useUser();
@@ -33,6 +31,13 @@ export default function HomeScreen() {
   // Animation for voice button
   const voiceButtonScale = useRef(new Animated.Value(1)).current;
   const instructionOpacity = useRef(new Animated.Value(0)).current;
+  const hintPulse = useRef(new Animated.Value(0.6)).current;
+  const filterDrawerAnim = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList>(null);
+  const [scrubberActive, setScrubberActive] = useState(false);
+  const scrubberY = useRef(new Animated.Value(0)).current;
+  const [scrubberLabel, setScrubberLabel] = useState('');
+  const [listAreaHeight, setListAreaHeight] = useState(SCREEN_HEIGHT * 0.6);
   
   // Theme colors
   const colorScheme = useColorScheme();
@@ -152,14 +157,57 @@ export default function HomeScreen() {
         delay: 500,
         useNativeDriver: true,
       }).start();
+      
+      // Gentle pulse for the "hold to speak" hint
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(hintPulse, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(hintPulse, {
+            toValue: 0.6,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
     }, 1000);
     
     return () => clearTimeout(timer);
   }, []);
 
-  const renderListItem = ({ item: listId }) => {
-    return <ListItem listId={listId} onPress={handleListPress} />;
-  };
+  // Filter drawer open/close animation
+  useEffect(() => {
+    Animated.timing(filterDrawerAnim, {
+      toValue: filterDrawerVisible ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [filterDrawerVisible]);
+
+  // Scrubber handler
+  const handleScrubberGesture = useCallback((evt: any) => {
+    const { locationY } = evt.nativeEvent;
+    const clampedY = Math.max(0, Math.min(locationY, listAreaHeight));
+    const ratio = clampedY / listAreaHeight;
+    const index = Math.round(ratio * (filteredAndSortedLists.length - 1));
+    
+    if (index >= 0 && index < filteredAndSortedLists.length) {
+      const listId = filteredAndSortedLists[index];
+      const listData = store?.getRow('lists', listId);
+      setScrubberLabel(String(listData?.name || ''));
+      
+      flatListRef.current?.scrollToIndex({
+        index,
+        animated: false,
+        viewPosition: 0,
+      });
+    }
+    
+    scrubberY.setValue(clampedY);
+  }, [filteredAndSortedLists, listAreaHeight, store]);
 
   const renderListCard = ({ item: listId }) => {
     return <ListCard listId={listId} onPress={handleListPress} />;
@@ -210,9 +258,19 @@ export default function HomeScreen() {
         backgroundColor={containerBg}
       />
       {/* Header */}
-      <View style={[styles.orgHeader, { backgroundColor: cardBg, borderBottomColor: borderColor }]}>
+      <View style={[styles.orgHeader, { backgroundColor: containerBg, borderBottomColor: borderColor }]}>
         <Text style={[styles.orgName, { color: primaryText }]}>{organization?.name || 'My Lists'}</Text>
         <View style={styles.headerButtons}>
+          {/* Filter button with active badge */}
+          <Pressable 
+            onPress={() => setFilterDrawerVisible(true)} 
+            style={[styles.filterButton, { backgroundColor: selectedTopic !== 'All' ? lightBlue : chipBg }]}
+          >
+            <Feather name="sliders" size={16} color={selectedTopic !== 'All' ? blueText : secondaryText} />
+            {selectedTopic !== 'All' && (
+              <Text style={[styles.filterBadgeText, { color: blueText }]}>{selectedTopic}</Text>
+            )}
+          </Pressable>
           {isSignedIn ? (
             <Pressable onPress={handleProfile} style={[styles.profileButton, { backgroundColor: lightGreen, borderColor: isDark ? 'transparent' : '#D1FAE5' }]}>
               <Feather name="user" size={16} color={greenText} />
@@ -224,45 +282,6 @@ export default function HomeScreen() {
               <Text style={[styles.signInButtonText, { color: blueText }]}>Sign In</Text>
             </Pressable>
           )}
-        </View>
-      </View>
-
-      {/* Compact Filters Row */}
-      <View style={styles.filtersRow}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.topicFilters}
-        >
-          <Pressable 
-            style={[styles.topicChip, { backgroundColor: selectedTopic === 'All' ? primaryBlue : chipBg }]}
-            onPress={() => setSelectedTopic('All')}
-          >
-            <Text style={[styles.topicText, { color: selectedTopic === 'All' ? '#FFFFFF' : secondaryText }]}>All</Text>
-          </Pressable>
-          {LIST_TYPE.map(topic => (
-            <Pressable 
-              key={topic}
-              style={[styles.topicChip, { backgroundColor: selectedTopic === topic ? primaryBlue : chipBg }]}
-              onPress={() => setSelectedTopic(topic)}
-            >
-              <Text style={[styles.topicText, { color: selectedTopic === topic ? '#FFFFFF' : secondaryText }]}>{topic}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-        <View style={styles.sortControls}>
-          <Pressable 
-            style={[styles.sortButton, { backgroundColor: sortBy === 'name' ? lightBlue : chipBg }]}
-            onPress={() => setSortBy('name')}
-          >
-            <Text style={[styles.sortText, { color: sortBy === 'name' ? blueText : secondaryText }]}>A-Z</Text>
-          </Pressable>
-          <Pressable 
-            style={[styles.sortButton, { backgroundColor: sortBy === 'todos' ? lightBlue : chipBg }]}
-            onPress={() => setSortBy('todos')}
-          >
-            <Feather name="check-square" size={12} color={sortBy === 'todos' ? blueText : secondaryText} />
-          </Pressable>
         </View>
       </View>
       
@@ -290,72 +309,190 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       ) : (
-        <FlatList
-          data={filteredAndSortedLists}
-          renderItem={renderListCard}
-          keyExtractor={(item) => item}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listCardsContainer}
-        />
+        <View 
+          style={styles.listAreaWrapper} 
+          onLayout={(e) => setListAreaHeight(e.nativeEvent.layout.height)}
+        >
+          <FlatList
+            ref={flatListRef}
+            data={filteredAndSortedLists}
+            renderItem={renderListCard}
+            keyExtractor={(item) => item}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listCardsContainer}
+            onScrollToIndexFailed={(info) => {
+              flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            }}
+          />
+          {/* Fast-scroll scrubber - only show when 5+ lists */}
+          {filteredAndSortedLists.length >= 5 && (
+            <View 
+              style={styles.scrubberTrack}
+              onStartShouldSetResponder={() => true}
+              onMoveShouldSetResponder={() => true}
+              onResponderGrant={(evt) => {
+                setScrubberActive(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                handleScrubberGesture(evt);
+              }}
+              onResponderMove={(evt) => {
+                handleScrubberGesture(evt);
+              }}
+              onResponderRelease={() => {
+                setScrubberActive(false);
+                setScrubberLabel('');
+              }}
+            >
+              <View style={[styles.scrubberLine, { backgroundColor: scrubberActive ? primaryBlue : (isDark ? 'rgba(255,255,255,0.15)' : '#E5E7EB') }]} />
+              {/* Scrubber thumb */}
+              {scrubberActive && (
+                <Animated.View 
+                  style={[
+                    styles.scrubberThumb,
+                    { 
+                      backgroundColor: primaryBlue,
+                      transform: [{ translateY: Animated.subtract(scrubberY, new Animated.Value(10)) }],
+                    }
+                  ]}
+                />
+              )}
+              {/* Floating label */}
+              {scrubberActive && scrubberLabel !== '' && (
+                <Animated.View 
+                  style={[
+                    styles.scrubberLabelContainer,
+                    { 
+                      backgroundColor: primaryBlue,
+                      transform: [{ translateY: Animated.subtract(scrubberY, new Animated.Value(16)) }],
+                    }
+                  ]}
+                >
+                  <Text style={styles.scrubberLabelText} numberOfLines={1}>{scrubberLabel}</Text>
+                  <View style={[styles.scrubberLabelArrow, { borderLeftColor: primaryBlue }]} />
+                </Animated.View>
+              )}
+            </View>
+          )}
+        </View>
       )}
 
-      {/* Floating Voice Pill */}
-      <Animated.View
-        style={[
-          styles.floatingVoicePill,
-          { transform: [{ scale: voiceButtonScale }] }
-        ]}
-      >
-        <Pressable
+      {/* Bottom Bar: Voice Pill + Create Button */}
+      <View style={styles.bottomBar}>
+        <Animated.View
           style={[
-            styles.voicePillButton,
-            { 
-              backgroundColor: isRecording ? primaryGreen : (isDark ? '#1F2937' : '#FFFFFF'),
-              shadowColor: isDark ? 'transparent' : '#000',
-            }
+            styles.floatingVoicePill,
+            { transform: [{ scale: voiceButtonScale }] }
           ]}
-          onPressIn={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            Animated.spring(voiceButtonScale, {
-              toValue: 0.95,
-              useNativeDriver: true,
-              speed: 50,
-              bounciness: 0,
-            }).start();
-            setVoiceModalVisible(true);
-            setIsRecording(true);
-          }}
-          onPressOut={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            Animated.spring(voiceButtonScale, {
-              toValue: 1,
-              useNativeDriver: true,
-              speed: 50,
-              bounciness: 10,
-            }).start();
-            setIsRecording(false);
-          }}
         >
-          <View style={[styles.voicePillIcon, { backgroundColor: primaryGreen }]}>
-            <Feather name="mic" size={14} color="#FFFFFF" />
-          </View>
-          <Text style={[
-            styles.voicePillText,
-            { color: isRecording ? '#FFFFFF' : secondaryText }
-          ]}>
-            Ask anything...
-          </Text>
-        </Pressable>
-      </Animated.View>
+          <Pressable
+            style={[
+              styles.voicePillButton,
+              { 
+                backgroundColor: isRecording ? primaryGreen : (isDark ? '#1F2937' : '#FFFFFF'),
+                shadowColor: isDark ? 'transparent' : '#000',
+                borderWidth: isRecording ? 0 : 1,
+                borderColor: isRecording ? 'transparent' : (isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB'),
+              }
+            ]}
+            onPressIn={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              Animated.spring(voiceButtonScale, {
+                toValue: 0.95,
+                useNativeDriver: true,
+                speed: 50,
+                bounciness: 0,
+              }).start();
+              setVoiceModalVisible(true);
+              setIsRecording(true);
+            }}
+            onPressOut={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              Animated.spring(voiceButtonScale, {
+                toValue: 1,
+                useNativeDriver: true,
+                speed: 50,
+                bounciness: 10,
+              }).start();
+              setIsRecording(false);
+            }}
+          >
+            <View style={[styles.voicePillIcon, { backgroundColor: primaryGreen }]}>
+              <Feather name="mic" size={14} color="#FFFFFF" />
+            </View>
+            <Text style={[
+              styles.voicePillText,
+              { color: isRecording ? '#FFFFFF' : secondaryText }
+            ]}>
+              Ask anything...
+            </Text>
+            <Animated.View style={[styles.holdBadge, { opacity: isRecording ? 0 : hintPulse, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F3F4F6' }]}>
+              <Feather name="radio" size={10} color={secondaryText} />
+              <Text style={[styles.holdBadgeText, { color: secondaryText }]}>Hold</Text>
+            </Animated.View>
+          </Pressable>
+        </Animated.View>
 
-      {/* Floating Create List Button */}
-      <Pressable
-        style={[styles.floatingCreateButton, { backgroundColor: primaryBlue, shadowColor: isDark ? 'transparent' : primaryBlue }]}
-        onPress={handleCreateList}
+        <Pressable
+          style={[styles.floatingCreateButton, { backgroundColor: primaryBlue, shadowColor: isDark ? 'transparent' : primaryBlue }]}
+          onPress={handleCreateList}
+        >
+          <Feather name="plus" size={24} color="#FFFFFF" />
+        </Pressable>
+      </View>
+
+      {/* Filter Drawer */}
+      <BottomSheet
+        visible={filterDrawerVisible}
+        onClose={() => setFilterDrawerVisible(false)}
+        contentStyle={[styles.drawerSheet, { backgroundColor: cardBg }]}
       >
-        <Feather name="plus" size={24} color="#FFFFFF" />
-      </Pressable>
-      
+        <View style={styles.drawerHandle} />
+        <View style={styles.drawerHeader}>
+          <Text style={[styles.drawerTitle, { color: primaryText }]}>Filter & Sort</Text>
+          <Pressable onPress={() => setFilterDrawerVisible(false)} hitSlop={10}>
+            <Feather name="x" size={20} color={secondaryText} />
+          </Pressable>
+        </View>
+
+        <Text style={[styles.drawerSectionLabel, { color: secondaryText }]}>Category</Text>
+        <View style={styles.drawerChipGrid}>
+          <Pressable 
+            style={[styles.drawerChip, { backgroundColor: selectedTopic === 'All' ? primaryBlue : chipBg }]}
+            onPress={() => { setSelectedTopic('All'); setFilterDrawerVisible(false); }}
+          >
+            <Feather name="grid" size={14} color={selectedTopic === 'All' ? '#FFFFFF' : secondaryText} />
+            <Text style={[styles.drawerChipText, { color: selectedTopic === 'All' ? '#FFFFFF' : primaryText }]}>All</Text>
+          </Pressable>
+          {LIST_TYPE.map(topic => (
+            <Pressable 
+              key={topic}
+              style={[styles.drawerChip, { backgroundColor: selectedTopic === topic ? primaryBlue : chipBg }]}
+              onPress={() => { setSelectedTopic(topic); setFilterDrawerVisible(false); }}
+            >
+              <Text style={[styles.drawerChipText, { color: selectedTopic === topic ? '#FFFFFF' : primaryText }]}>{topic}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={[styles.drawerSectionLabel, { color: secondaryText, marginTop: 20 }]}>Sort by</Text>
+        <View style={styles.drawerSortRow}>
+          <Pressable 
+            style={[styles.drawerSortOption, { backgroundColor: sortBy === 'name' ? lightBlue : chipBg, borderColor: sortBy === 'name' ? primaryBlue : 'transparent' }]}
+            onPress={() => setSortBy('name')}
+          >
+            <Feather name="type" size={16} color={sortBy === 'name' ? blueText : secondaryText} />
+            <Text style={[styles.drawerSortText, { color: sortBy === 'name' ? blueText : primaryText }]}>Alphabetical</Text>
+          </Pressable>
+          <Pressable 
+            style={[styles.drawerSortOption, { backgroundColor: sortBy === 'todos' ? lightBlue : chipBg, borderColor: sortBy === 'todos' ? primaryBlue : 'transparent' }]}
+            onPress={() => setSortBy('todos')}
+          >
+            <Feather name="check-square" size={16} color={sortBy === 'todos' ? blueText : secondaryText} />
+            <Text style={[styles.drawerSortText, { color: sortBy === 'todos' ? blueText : primaryText }]}>By items</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
+
       {/* Voice Modal */}
       <VoiceModal
         visible={voiceModalVisible}
@@ -393,14 +530,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  header: {
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButton: {
-    padding: 8,
-  },
   orgHeader: {
     paddingTop: 8,
     paddingHorizontal: 16,
@@ -419,18 +548,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  navButton: {
-    backgroundColor: '#EFF6FF',
+  filterButton: {
     paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  navButtonText: {
-    color: '#2563EB',
+  filterBadgeText: {
+    fontSize: 13,
     fontWeight: '600',
-    fontSize: 14,
   },
   profileButton: {
     paddingVertical: 8,
@@ -442,19 +570,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   profileButtonText: {
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  signOutButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  signOutButtonText: {
     fontWeight: '600',
     fontSize: 14,
   },
@@ -471,14 +586,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  listContainer: {
-    padding: 12,
+  listAreaWrapper: {
+    flex: 1,
+    position: 'relative',
   },
   listCardsContainer: {
     paddingTop: 12,
     paddingBottom: 100,
   },
-
   emptyState: {
     flex: 1,
     justifyContent: 'center',
@@ -530,45 +645,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.5,
   },
-  // Compact Filters Row
-  filtersRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingRight: 12,
-  },
-  topicFilters: {
-    paddingLeft: 12,
-    paddingRight: 8,
-    gap: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  topicChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  topicText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  sortControls: {
-    flexDirection: 'row',
-    gap: 4,
-    marginLeft: 'auto',
-  },
-  sortButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  sortText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-
-  // Empty Filter State
   emptyFilterState: {
     flex: 1,
     justifyContent: 'center',
@@ -581,52 +657,191 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Floating Create Button
-  // Floating Voice Pill
+  // Bottom bar
+  bottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    paddingTop: 8,
+    gap: 12,
+  },
   floatingVoicePill: {
-    position: 'absolute',
-    bottom: 24,
-    left: 16,
-    right: 80,
+    flex: 1,
   },
   voicePillButton: {
-    height: 44,
-    borderRadius: 22,
+    height: 48,
+    borderRadius: 24,
     flexDirection: 'row',
     alignItems: 'center',
     paddingLeft: 4,
-    paddingRight: 16,
+    paddingRight: 6,
     gap: 10,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
   voicePillIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   voicePillText: {
     fontSize: 15,
     fontWeight: '500',
+    flex: 1,
   },
-
-  // Floating Create Button
+  holdBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  holdBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   floatingCreateButton: {
-    position: 'absolute',
-    bottom: 24,
-    right: 16,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 4,
+  },
+
+  // Filter Drawer
+  drawerSheet: {
+    paddingTop: 8,
+    paddingHorizontal: 24,
+  },
+  drawerHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  drawerTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  drawerSectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  drawerChipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  drawerChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  drawerChipText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  drawerSortRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  drawerSortOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  drawerSortText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  // Scrubber
+  scrubberTrack: {
+    position: 'absolute',
+    right: 0,
+    top: 12,
+    bottom: 100,
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  scrubberLine: {
+    width: 3,
+    height: '100%',
+    borderRadius: 1.5,
+  },
+  scrubberThumb: {
+    position: 'absolute',
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  scrubberLabelContainer: {
+    position: 'absolute',
+    right: 32,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    maxWidth: 160,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  scrubberLabelText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  scrubberLabelArrow: {
+    position: 'absolute',
+    right: -6,
+    top: '50%',
+    marginTop: -4,
+    width: 0,
+    height: 0,
+    borderTopWidth: 4,
+    borderBottomWidth: 4,
+    borderLeftWidth: 6,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
   },
 });

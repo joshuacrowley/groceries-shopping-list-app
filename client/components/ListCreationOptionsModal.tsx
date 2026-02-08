@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Alert, ActivityIndicator } from 'react-native';
 import PhosphorIcon from './PhosphorIcon';
+import BottomSheet from './BottomSheet';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -137,76 +138,62 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
   };
 
   return (
-    <Modal
+    <BottomSheet
       visible={visible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      contentStyle={styles.modal}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <View style={styles.modal}>
-          {isProcessing ? (
-            // Show loading state while processing
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#2196F3" />
-              <Text style={styles.loadingText}>Processing photo...</Text>
-            </View>
-          ) : (
-            <>
-              <View style={styles.header}>
-                <Text style={styles.title}>Create New List</Text>
-                <Pressable onPress={onClose} style={styles.closeButton}>
-                  <PhosphorIcon name="X" size={20} color="#666" weight="bold" />
-                </Pressable>
-              </View>
-              
-              <View style={styles.separator} />
-
-              <View style={styles.options}>
-                <Pressable style={styles.option} onPress={handleCreateManually}>
-                  <View style={styles.optionIcon}>
-                    <PhosphorIcon name="Plus" size={32} color="#2196F3" weight="bold" />
-                  </View>
-                  <View style={styles.optionContent}>
-                    <Text style={styles.optionTitle}>Create Manually</Text>
-                    <Text style={styles.optionDescription}>
-                      Choose from templates and customize your list
-                    </Text>
-                  </View>
-                </Pressable>
-
-                <Pressable style={styles.option} onPress={handleCreateWithPhoto}>
-                  <View style={styles.optionIcon}>
-                    <PhosphorIcon name="Camera" size={32} color="#FF9800" weight="bold" />
-                  </View>
-                  <View style={styles.optionContent}>
-                    <Text style={styles.optionTitle}>Scan with Camera</Text>
-                    <Text style={styles.optionDescription}>
-                      Take a photo of a document, recipe, or collection to get smart template suggestions
-                    </Text>
-                  </View>
-                </Pressable>
-              </View>
-            </>
-          )}
+      {isProcessing ? (
+        // Show loading state while processing
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2196F3" />
+          <Text style={styles.loadingText}>Processing photo...</Text>
         </View>
-      </Pressable>
-    </Modal>
+      ) : (
+        <>
+          <View style={styles.header}>
+            <Text style={styles.title}>Create New List</Text>
+            <Pressable onPress={onClose} style={styles.closeButton}>
+              <PhosphorIcon name="X" size={20} color="#666" weight="bold" />
+            </Pressable>
+          </View>
+          
+          <View style={styles.separator} />
+
+          <View style={styles.options}>
+            <Pressable style={styles.option} onPress={handleCreateManually}>
+              <View style={styles.optionIcon}>
+                <PhosphorIcon name="Plus" size={32} color="#2196F3" weight="bold" />
+              </View>
+              <View style={styles.optionContent}>
+                <Text style={styles.optionTitle}>Create Manually</Text>
+                <Text style={styles.optionDescription}>
+                  Choose from templates and customize your list
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable style={styles.option} onPress={handleCreateWithPhoto}>
+              <View style={styles.optionIcon}>
+                <PhosphorIcon name="Camera" size={32} color="#FF9800" weight="bold" />
+              </View>
+              <View style={styles.optionContent}>
+                <Text style={styles.optionTitle}>Scan with Camera</Text>
+                <Text style={styles.optionDescription}>
+                  Take a photo of a document, recipe, or collection to get smart template suggestions
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        </>
+      )}
+    </BottomSheet>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
   modal: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
     paddingTop: 24,
-    paddingBottom: 40,
     maxHeight: '80%',
   },
   header: {

@@ -21,11 +21,8 @@ import { createExpoSqlitePersister } from "tinybase/persisters/persister-expo-sq
 import * as SQLite from "expo-sqlite";
 import { SCHEMA } from "./schema";
 
-// Enable detailed logging
-const DEBUG = true;
-
-function debugLog(...args) {
-  if (DEBUG) {
+function debugLog(...args: any[]) {
+  if (__DEV__) {
     console.log("[TTTStore]", ...args);
   }
 }
@@ -113,23 +110,24 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   // Set up local persistence with SQLite
+  // This provides offline persistence between app restarts.
+  // The persister and WebSocket synchronizer operate at different layers:
+  // - Persister: saves in-memory store state to local SQLite
+  // - Synchronizer: merges state with remote server via WebSocket
+  // TinyBase's CRDT-based mergeable stores ensure idempotent merges (no sync loops).
   useCreatePersister(
     store,
     (store) => {
-      const db = SQLite.openDatabaseSync(storeId || "default-store" + ".db");
+      const db = SQLite.openDatabaseSync(
+        (storeId || "default-store") + ".db"
+      );
       return createExpoSqlitePersister(store, db);
     },
     [storeId],
     async (persister) => {
       await persister.load();
-      // Temporarily disable auto-save to prevent potential sync loops
-      // The WebSocket synchronizer already handles persistence to the server
-      // await persister.startAutoSave();
-      
-      // TO RE-ENABLE: Uncomment the line above after confirming the sync loop is fixed
-      // Auto-save provides offline persistence between app restarts
-      
-      debugLog("Local persister loaded and ready");
+      await persister.startAutoSave();
+      debugLog("Local persister loaded and auto-save started");
       setIsPersisterReady(true);
     },
     [storeId]
@@ -174,11 +172,11 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         try {
           token = await getToken();
           if (!token) {
-            console.error("No token available from session");
+            if (__DEV__) console.error("No token available from session");
             return null;
           }
         } catch (error) {
-          console.error("Error getting token:", error);
+          if (__DEV__) console.error("Error getting token:", error);
           return null;
         }
 
@@ -217,11 +215,13 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
         });
 
         ws.addEventListener("error", (event) => {
-          console.error("WebSocket error:", {
-            readyState: ws.readyState,
-            type: event.type,
-            error: event,
-          });
+          if (__DEV__) {
+            console.error("WebSocket error:", {
+              readyState: ws.readyState,
+              type: event.type,
+              error: event,
+            });
+          }
         });
         
         // Add message debugging
@@ -259,7 +259,7 @@ const TTTStoreProvider: React.FC<{ children: React.ReactNode }> = ({
 
         return synchronizer;
       } catch (error) {
-        console.error("Error in createWsSynchronizer:", error);
+        if (__DEV__) console.error("Error in createWsSynchronizer:", error);
         return null;
       }
     },

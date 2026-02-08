@@ -236,7 +236,7 @@ const AddTaskModal = memo(
     }, [task, onAdd, onClose]);
 
     return (
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>

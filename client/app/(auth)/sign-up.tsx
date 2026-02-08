@@ -1,21 +1,26 @@
 import * as React from "react";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { View } from "react-native";
+import { View, Pressable, Linking, useColorScheme, Platform } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { BodyScrollView } from "@/components/ui/BodyScrollView";
 import Button from "@/components/ui/button";
 import TextInput from "@/components/ui/text-input";
-import { isClerkAPIResponseError, useSignUp, useOAuth } from "@clerk/clerk-expo";
+import { isClerkAPIResponseError, useSignUp, useOAuth, useSignInWithApple } from "@clerk/clerk-expo";
 import { ClerkAPIError } from "@clerk/types";
 import * as WebBrowser from "expo-web-browser";
+import { appleBlue, zincColors } from "@/constants/Colors";
+import * as AppleAuthentication from "expo-apple-authentication";
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SignUpScreen() {
   const { isLoaded, signUp, setActive } = useSignUp();
-  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
+  const { startOAuthFlow: startGoogleOAuthFlow } = useOAuth({ strategy: "oauth_google" });
+  const { startAppleAuthenticationFlow } = useSignInWithApple();
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
 
   const [emailAddress, setEmailAddress] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -24,6 +29,7 @@ export default function SignUpScreen() {
   const [errors, setErrors] = React.useState<ClerkAPIError[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isGoogleSigningIn, setIsGoogleSigningIn] = React.useState(false);
+  const [isAppleSigningIn, setIsAppleSigningIn] = React.useState(false);
 
   const onSignUpPress = async () => {
     if (!isLoaded) return;
@@ -61,7 +67,7 @@ export default function SignUpScreen() {
     setIsGoogleSigningIn(true);
     
     try {
-      const { createdSessionId, setActive } = await startOAuthFlow();
+      const { createdSessionId, setActive } = await startGoogleOAuthFlow();
       
       if (createdSessionId) {
         await setActive!({ session: createdSessionId });
@@ -72,6 +78,29 @@ export default function SignUpScreen() {
       console.error("Google OAuth error:", JSON.stringify(err, null, 2));
     } finally {
       setIsGoogleSigningIn(false);
+    }
+  };
+
+  const onAppleSignInPress = async () => {
+    if (process.env.EXPO_OS === "ios") {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setIsAppleSigningIn(true);
+
+    try {
+      const { createdSessionId, setActive } =
+        await startAppleAuthenticationFlow();
+
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace("/(index)");
+      }
+    } catch (err: any) {
+      if (err.code === "ERR_REQUEST_CANCELED") return;
+      if (isClerkAPIResponseError(err)) setErrors(err.errors);
+      console.error("Apple Sign-In error:", JSON.stringify(err, null, 2));
+    } finally {
+      setIsAppleSigningIn(false);
     }
   };
 
@@ -158,16 +187,41 @@ export default function SignUpScreen() {
       </Button>
       
       <View style={{ marginTop: 16, alignItems: "center" }}>
-        <ThemedText style={{ marginBottom: 12, color: '#666' }}>Or continue with</ThemedText>
+        <ThemedText style={{ marginBottom: 12, color: isDark ? zincColors[500] : zincColors[400] }}>Or continue with</ThemedText>
         <Button
           onPress={onGoogleSignInPress}
           loading={isGoogleSigningIn}
-          disabled={isGoogleSigningIn || isLoading}
+          disabled={isGoogleSigningIn || isLoading || isAppleSigningIn}
           variant="outline"
           style={{ width: '100%' }}
         >
           {isGoogleSigningIn ? 'Signing in...' : 'Continue with Google'}
         </Button>
+        <View style={{ marginTop: 10, width: '100%' }}>
+          {Platform.OS === "ios" ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              buttonStyle={
+                isDark
+                  ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                  : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+              }
+              cornerRadius={12}
+              style={{ width: "100%", height: 44 }}
+              onPress={onAppleSignInPress}
+            />
+          ) : (
+            <Button
+              onPress={onAppleSignInPress}
+              loading={isAppleSigningIn}
+              disabled={isAppleSigningIn || isLoading || isGoogleSigningIn}
+              variant="outline"
+              style={{ width: '100%' }}
+            >
+              {isAppleSigningIn ? 'Signing in...' : 'Continue with Apple'}
+            </Button>
+          )}
+        </View>
       </View>
       
       {errors.map((error) => (
@@ -175,6 +229,20 @@ export default function SignUpScreen() {
           {error.longMessage}
         </ThemedText>
       ))}
+
+      <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 24, flexWrap: "wrap" }}>
+        <ThemedText style={{ fontSize: 13, color: isDark ? zincColors[500] : zincColors[400] }}>
+          By continuing, you agree to our{" "}
+        </ThemedText>
+        <Pressable
+          onPress={() => Linking.openURL("https://tinytalkingtodos.com/privacy")}
+          hitSlop={8}
+        >
+          <ThemedText style={{ fontSize: 13, color: appleBlue, fontWeight: "500", textDecorationLine: "underline" }}>
+            Privacy Policy
+          </ThemedText>
+        </Pressable>
+      </View>
     </BodyScrollView>
   );
 }

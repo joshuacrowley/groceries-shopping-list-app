@@ -9,6 +9,7 @@ import {
   Pressable,
   useColorScheme,
   Linking,
+  Platform,
 } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { BodyScrollView } from "@/components/ui/BodyScrollView";
@@ -18,6 +19,7 @@ import {
   isClerkAPIResponseError,
   useSignIn,
   useOAuth,
+  useSignInWithApple,
 } from "@clerk/clerk-expo";
 import { ClerkAPIError } from "@clerk/types";
 import * as WebBrowser from "expo-web-browser";
@@ -48,6 +50,7 @@ import {
   Basket,
 } from "phosphor-react-native";
 import { appleBlue, zincColors } from "@/constants/Colors";
+import * as AppleAuthentication from "expo-apple-authentication";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -289,7 +292,8 @@ const FloatingIconsBackground = React.memo(function FloatingIconsBackground({
 
 export default function SignIn() {
   const { signIn, setActive, isLoaded } = useSignIn();
-  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
+  const { startOAuthFlow: startGoogleOAuthFlow } = useOAuth({ strategy: "oauth_google" });
+  const { startAppleAuthenticationFlow } = useSignInWithApple();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -298,6 +302,7 @@ export default function SignIn() {
   const [password, setPassword] = React.useState("");
   const [isSigningIn, setIsSigningIn] = React.useState(false);
   const [isGoogleSigningIn, setIsGoogleSigningIn] = React.useState(false);
+  const [isAppleSigningIn, setIsAppleSigningIn] = React.useState(false);
   const [errors, setErrors] = React.useState<ClerkAPIError[]>([]);
 
   const onSignInPress = React.useCallback(async () => {
@@ -318,11 +323,11 @@ export default function SignIn() {
         await setActive({ session: signInAttempt.createdSessionId });
         router.replace("/(index)");
       } else {
-        console.error(JSON.stringify(signInAttempt, null, 2));
+        if (__DEV__) console.error(JSON.stringify(signInAttempt, null, 2));
       }
     } catch (err) {
       if (isClerkAPIResponseError(err)) setErrors(err.errors);
-      console.error(JSON.stringify(err, null, 2));
+      if (__DEV__) console.error(JSON.stringify(err, null, 2));
     } finally {
       setIsSigningIn(false);
     }
@@ -335,7 +340,7 @@ export default function SignIn() {
     setIsGoogleSigningIn(true);
 
     try {
-      const { createdSessionId, setActive } = await startOAuthFlow();
+      const { createdSessionId, setActive } = await startGoogleOAuthFlow();
 
       if (createdSessionId) {
         await setActive!({ session: createdSessionId });
@@ -343,11 +348,34 @@ export default function SignIn() {
       }
     } catch (err) {
       if (isClerkAPIResponseError(err)) setErrors(err.errors);
-      console.error("Google OAuth error:", JSON.stringify(err, null, 2));
+      if (__DEV__) console.error("Google OAuth error:", JSON.stringify(err, null, 2));
     } finally {
       setIsGoogleSigningIn(false);
     }
-  }, [startOAuthFlow, router]);
+  }, [startGoogleOAuthFlow, router]);
+
+  const onAppleSignInPress = React.useCallback(async () => {
+    if (process.env.EXPO_OS === "ios") {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    setIsAppleSigningIn(true);
+
+    try {
+      const { createdSessionId, setActive } =
+        await startAppleAuthenticationFlow();
+
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        router.replace("/(index)");
+      }
+    } catch (err: any) {
+      if (err.code === "ERR_REQUEST_CANCELED") return;
+      if (isClerkAPIResponseError(err)) setErrors(err.errors);
+      if (__DEV__) console.error("Apple Sign-In error:", JSON.stringify(err, null, 2));
+    } finally {
+      setIsAppleSigningIn(false);
+    }
+  }, [startAppleAuthenticationFlow, router]);
 
   const onNavigatePress = React.useCallback(
     async (path: Href) => {
@@ -475,11 +503,40 @@ export default function SignIn() {
           <Button
             onPress={onGoogleSignInPress}
             loading={isGoogleSigningIn}
-            disabled={isGoogleSigningIn || isSigningIn}
+            disabled={isGoogleSigningIn || isSigningIn || isAppleSigningIn}
             variant="outline"
           >
             {isGoogleSigningIn ? "Signing in..." : "Continue with Google"}
           </Button>
+        </Animated.View>
+
+        {/* Apple Sign In */}
+        <Animated.View
+          entering={FadeInDown.duration(600).delay(750)}
+          style={styles.appleButtonContainer}
+        >
+          {Platform.OS === "ios" ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              buttonStyle={
+                isDark
+                  ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                  : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+              }
+              cornerRadius={12}
+              style={styles.appleButton}
+              onPress={onAppleSignInPress}
+            />
+          ) : (
+            <Button
+              onPress={onAppleSignInPress}
+              loading={isAppleSigningIn}
+              disabled={isAppleSigningIn || isSigningIn || isGoogleSigningIn}
+              variant="outline"
+            >
+              {isAppleSigningIn ? "Signing in..." : "Continue with Apple"}
+            </Button>
+          )}
         </Animated.View>
 
         {/* Sign Up */}
@@ -500,9 +557,32 @@ export default function SignIn() {
           </Pressable>
         </Animated.View>
 
-        {/* Website Link */}
+        {/* Privacy Policy */}
         <Animated.View
           entering={FadeInDown.duration(600).delay(900)}
+          style={styles.privacyContainer}
+        >
+          <ThemedText
+            style={[
+              styles.privacyText,
+              { color: isDark ? zincColors[500] : zincColors[400] },
+            ]}
+          >
+            By continuing, you agree to our{" "}
+          </ThemedText>
+          <Pressable
+            onPress={() =>
+              Linking.openURL("https://tinytalkingtodos.com/privacy")
+            }
+            hitSlop={8}
+          >
+            <ThemedText style={styles.privacyLink}>Privacy Policy</ThemedText>
+          </Pressable>
+        </Animated.View>
+
+        {/* Website Link */}
+        <Animated.View
+          entering={FadeInDown.duration(600).delay(1000)}
           style={styles.websiteContainer}
         >
           <Pressable
@@ -591,9 +671,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 16,
   },
+  appleButtonContainer: {
+    marginTop: 10,
+  },
+  appleButton: {
+    width: "100%",
+    height: 44,
+  },
+  privacyContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 24,
+    flexWrap: "wrap",
+  },
+  privacyText: {
+    fontSize: 13,
+  },
+  privacyLink: {
+    color: appleBlue,
+    fontSize: 13,
+    fontWeight: "500",
+    textDecorationLine: "underline",
+  },
   websiteContainer: {
     alignItems: "center",
-    marginTop: 32,
+    marginTop: 16,
     marginBottom: 16,
   },
   websiteLink: {

@@ -1,45 +1,134 @@
 import React, { useEffect, useState } from "react";
 import { Link, Stack, useRouter, useLocalSearchParams } from "expo-router";
-import { StyleSheet, Text, View, ScrollView, Pressable, Alert, SafeAreaView } from "react-native";
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  Pressable,
+  SafeAreaView,
+  useColorScheme,
+  LayoutAnimation,
+  TextInput as RNTextInput,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BodyScrollView } from "@/components/ui/BodyScrollView";
-import Button from "@/components/ui/button";
-import TextInput from "@/components/ui/text-input";
+import PhosphorIcon from "@/components/PhosphorIcon";
 import { appleBlue, backgroundColors, emojies } from "@/constants/Colors";
 import { useListCreation } from "@/context/ListCreationContext";
-import { useAddShoppingListCallback } from "@/stores/ShoppingListsStore";
 import { LIST_TYPE, BACKGROUND_COLOUR } from "@/stores/schema";
-import catalogue from '../../../../catalogue.json';
+import { useStore } from "tinybase/ui-react";
+import { getUniqueId } from "tinybase";
+import {
+  House,
+  Info,
+  Heart,
+  ForkKnife,
+  Package,
+  GameController,
+  FirstAid,
+  BookOpen,
+  CurrencyDollar,
+  Cube,
+  Check,
+  CaretDown,
+  CaretUp,
+  PencilSimple,
+  ListChecks,
+} from "phosphor-react-native";
+import catalogue from "../../../../catalogue.json";
 
-// Get available templates from catalogue, filtered and formatted for UI
-const AVAILABLE_TEMPLATES = [
-  { id: "", name: "Default", description: "Basic todo list functionality", type: "Info" },
-  ...catalogue
-    .filter(template => template.published)
-    .map(template => ({
-      id: template.template,
-      name: template.name,
-      description: template.purpose,
-      type: template.type,
-      systemPrompt: template.systemPrompt || '',
-      backgroundColour: template.backgroundColour || 'blue',
-      icon: template.icon || '📝'
-    }))
-    .slice(0, 20) // Limit to top 20 for UI performance
-];
+// ── Templates ──────────────────────────────────────────────────────────────────
 
-// Helper function to map schema colors to actual color values
-const getColorValue = (colorName: string): string => {
-  const colorMap: { [key: string]: string } = {
-    blue: "#3b82f6",
-    green: "#22c55e", 
-    red: "#ef4444",
-    yellow: "#eab308",
-    purple: "#8b5cf6"
-  };
-  return colorMap[colorName] || "#3b82f6";
+// Only show templates that have a matching display component in client/templates/
+const VALID_TEMPLATE_IDS = new Set([
+  "ShoppingListv2",
+  "Today",
+  "WeeklyMealPlanner",
+  "WeekendPlanner",
+  "Recipes",
+  "RecipeCard",
+  "AfterSchoolRoutine",
+  "Beach",
+  "BirthdayTracker",
+  "CarMaintenance",
+  "ChildTemperatureTracker",
+  "Clothes",
+  "DateNightList",
+  "Expiry",
+  "GiveAwayList",
+  "HomeMaintenanceList",
+  "KidsPartyFoodList",
+  "LaundryTracker",
+  "Leftovers",
+  "LunchPlanner",
+  "MentalLoad",
+  "MorningRoutine",
+  "OffloadList",
+  "ParkLife",
+  "PartyBags",
+  "PartyGuestList",
+  "SchoolCalendarTodo",
+  "SchoolHolidayPlanner",
+  "SchoolPickupRoster",
+  "SubscriptionTracker",
+  "TidyUp",
+]);
+
+const CATALOGUE_TEMPLATES = catalogue
+  .filter((t) => t.published)
+  .filter((t) => VALID_TEMPLATE_IDS.has(t.template))
+  .map((t) => ({
+    id: t.template,
+    name: t.name,
+    description: t.purpose,
+    type: t.type,
+    systemPrompt: t.systemPrompt || "",
+    backgroundColour: t.backgroundColour || "blue",
+    icon: t.icon || "📝",
+  }))
+  .slice(0, 20);
+
+// Special sentinel for "Custom list"
+const CUSTOM_ID = "__custom__";
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const COLOR_VALUES: Record<string, string> = {
+  blue: "#3B82F6",
+  green: "#22C55E",
+  red: "#EF4444",
+  yellow: "#F59E0B",
+  purple: "#8B5CF6",
 };
 
+const getColorValue = (name: string): string =>
+  COLOR_VALUES[name] || COLOR_VALUES.blue;
+
+const isEmojiString = (str: string): boolean => {
+  if (!str) return false;
+  if (/^[A-Z][a-zA-Z]+$/.test(str)) return false;
+  return true;
+};
+
+const TYPE_ICONS: Record<string, React.FC<any>> = {
+  Info: Info,
+  Home: House,
+  Life: Heart,
+  Food: ForkKnife,
+  Stuff: Package,
+  Fun: GameController,
+  Health: FirstAid,
+  Learn: BookOpen,
+  Money: CurrencyDollar,
+};
+
+const INITIAL_VISIBLE = 5;
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
 export default function CreateListScreen() {
+  // Form state
   const [listName, setListName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -47,84 +136,127 @@ export default function CreateListScreen() {
   const [backgroundColour, setBackgroundColour] = useState<string>("blue");
   const [icon, setIcon] = useState("");
   const [number, setNumber] = useState<string>("");
-  const [template, setTemplate] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [code, setCode] = useState("");
+
+  // UI state
+  const [showAllTemplates, setShowAllTemplates] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
-  const [createdListId, setCreatedListId] = useState<string>("");
+  const [createdListId, setCreatedListId] = useState("");
+
   const { selectedEmoji, setSelectedEmoji, selectedColor, setSelectedColor } =
     useListCreation();
 
   const router = useRouter();
   const params = useLocalSearchParams();
-  const addShoppingList = useAddShoppingListCallback();
+  const store = useStore();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
+
+  const isCustom = selectedTemplateId === CUSTOM_ID;
+
+  // Theme
+  const colors = {
+    bg: isDark ? "#000000" : "#F2F2F7",
+    cardBg: isDark ? "#1C1C1E" : "#FFFFFF",
+    text: isDark ? "#F2F2F7" : "#000000",
+    secondaryText: isDark ? "#8E8E93" : "#6B7280",
+    tertiaryText: isDark ? "#636366" : "#AEAEB2",
+    separator: isDark ? "#38383A" : "#E5E5EA",
+    headerBg: isDark ? "#1C1C1E" : "#F9F9F9",
+    headerBorder: isDark ? "#38383A" : "#E5E5EA",
+    groupedBg: isDark ? "#1C1C1E" : "#FFFFFF",
+    pillBg: isDark ? "#2C2C2E" : "#F2F2F7",
+    pillSelectedBg: appleBlue,
+    pillBorder: isDark ? "#3A3A3C" : "#E5E7EB",
+  };
+
+  // ── Effects ──
 
   useEffect(() => {
-    // Set random defaults only once
     setSelectedEmoji(emojies[Math.floor(Math.random() * emojies.length)]);
     setSelectedColor(
       backgroundColors[Math.floor(Math.random() * backgroundColors.length)]
     );
     setIcon(emojies[Math.floor(Math.random() * emojies.length)]);
-
-    // Cleanup function to reset context when unmounting
     return () => {
       setSelectedEmoji("");
       setSelectedColor("");
     };
-  }, []); // Remove params dependency to prevent infinite loop
+  }, []);
 
-  // Separate useEffect for handling URL parameters
   useEffect(() => {
-    // Handle URL parameters for voice/photo creation
     if (params.selectedTemplate) {
-      const selectedTemplateData = AVAILABLE_TEMPLATES.find(t => t.id === params.selectedTemplate);
-      if (selectedTemplateData) {
-        setTemplate(params.selectedTemplate as string);
-        setSystemPrompt(selectedTemplateData.systemPrompt);
-        setBackgroundColour(selectedTemplateData.backgroundColour);
-        setSelectedType(selectedTemplateData.type);
-        setIcon(selectedTemplateData.icon);
+      const data = CATALOGUE_TEMPLATES.find(
+        (t) => t.id === params.selectedTemplate
+      );
+      if (data) {
+        selectTemplate(data);
       }
     }
-    
-    if (params.description) {
-      setPurpose(params.description as string);
+    if (params.description) setPurpose(params.description as string);
+    if (params.fromVoice === "true")
+      setListName((params.suggestedName as string) || "Voice-created list");
+    if (params.fromPhoto === "true") {
+      setListName((params.suggestedName as string) || "Photo-based list");
+      if (params.suggestedIcon) setIcon(params.suggestedIcon as string);
     }
+  }, [
+    params.selectedTemplate,
+    params.description,
+    params.fromVoice,
+    params.fromPhoto,
+    params.suggestedName,
+    params.suggestedIcon,
+    params.photoUri,
+    params.photoAnalysis,
+  ]);
 
-    if (params.fromVoice === 'true') {
-      setListName(params.suggestedName as string || `Voice-created list`);
-    }
+  // ── Template selection ──
 
-    if (params.fromPhoto === 'true') {
-      setListName(params.suggestedName as string || `Photo-based list`);
-      
-      if (params.suggestedIcon) {
-        setIcon(params.suggestedIcon as string);
-      }
-    }
-  }, [params.selectedTemplate, params.description, params.fromVoice, params.fromPhoto, params.suggestedName, params.suggestedIcon, params.photoUri, params.photoAnalysis]); // Only depend on specific param values
+  const selectTemplate = (t: (typeof CATALOGUE_TEMPLATES)[number]) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedTemplateId(t.id);
+    setSystemPrompt(t.systemPrompt || "");
+    setBackgroundColour(t.backgroundColour || "blue");
+    setSelectedType(t.type);
+    setIcon(t.icon || "📝");
+    // Pre-fill name with template name if user hasn't typed one
+    if (!listName) setListName(t.name);
+  };
+
+  const selectCustom = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setSelectedTemplateId(CUSTOM_ID);
+    setSystemPrompt("");
+  };
+
+  // ── Handlers ──
 
   const handleCreateList = () => {
-    if (!listName) {
-      return;
-    }
+    if (!listName) return;
 
-    const listId = addShoppingList(
-      listName,
-      purpose,
-      selectedEmoji || icon,
-      backgroundColour,
-      selectedType,
-      systemPrompt,
-      number ? parseInt(number) : undefined,
-      template,
-      code
-    );
+    const listId = getUniqueId();
+    store.setRow("lists", listId, {
+      name: listName,
+      purpose: purpose || "",
+      icon: selectedEmoji || icon || "📝",
+      backgroundColour: backgroundColour || "blue",
+      type: selectedType || "Info",
+      systemPrompt: systemPrompt || "",
+      number: number ? parseInt(number) : 0,
+      template: selectedTemplateId === CUSTOM_ID ? "" : selectedTemplateId,
+      code: code || "",
+    });
 
     setCreatedListId(listId);
 
-    // Show follow-up modal for voice/photo creation with AI todo generation
-    if ((params.fromVoice === 'true' || params.fromPhoto === 'true') && systemPrompt) {
+    if (
+      (params.fromVoice === "true" || params.fromPhoto === "true") &&
+      systemPrompt
+    ) {
       setShowFollowUpModal(true);
     } else {
       router.replace({
@@ -136,18 +268,17 @@ export default function CreateListScreen() {
 
   const handleGenerateTodos = async () => {
     setShowFollowUpModal(false);
-    // Navigate to list and show loading/generation state
     router.replace({
       pathname: "/list/[listId]",
-      params: { 
+      params: {
         listId: createdListId,
-        generateTodos: 'true',
-        systemPrompt: systemPrompt,
-        description: purpose || params.description as string || '',
-        photoUri: params.photoUri as string || '',
-        photoAnalysis: params.photoAnalysis as string || '',
-        fromVoice: params.fromVoice as string || '',
-        fromPhoto: params.fromPhoto as string || ''
+        generateTodos: "true",
+        systemPrompt,
+        description: purpose || (params.description as string) || "",
+        photoUri: (params.photoUri as string) || "",
+        photoAnalysis: (params.photoAnalysis as string) || "",
+        fromVoice: (params.fromVoice as string) || "",
+        fromPhoto: (params.fromPhoto as string) || "",
       },
     });
   };
@@ -160,502 +291,738 @@ export default function CreateListScreen() {
     });
   };
 
-  const handleCreateTestLists = () => {
-    const testListNames = [
-      "Grocery Shopping",
-      "Weekend BBQ",
-      "Party Supplies",
-      "Office Supplies",
-      "Camping Trip",
-      "Holiday Gifts",
-      "Home Improvement",
-      "School Supplies",
-      "Birthday Party",
-      "Household Items",
-    ];
-
-    const testEmojis = [
-      "🛒",
-      "🍖",
-      "🎉",
-      "📎",
-      "⛺️",
-      "🎁",
-      "🔨",
-      "📚",
-      "🎂",
-      "🏠",
-    ];
-    const testColors = Object.values(backgroundColors).slice(0, 10);
-
-    testListNames.forEach((name, index) => {
-      useAddShoppingList(
-        name,
-        `This is a test list for ${name}`,
-        testEmojis[index],
-        testColors[index]
-      );
-    });
-
-    // Navigate back to the main list view
-    router.replace("/");
+  const toggleShowAll = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setShowAllTemplates(!showAllTemplates);
   };
 
+  const toggleAdvanced = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setShowAdvanced(!showAdvanced);
+  };
+
+  // ── Derived ──
+
+  const displayEmoji = selectedEmoji || icon || "📋";
+  const accentColor = getColorValue(backgroundColour);
+  const visibleTemplates = showAllTemplates
+    ? CATALOGUE_TEMPLATES
+    : CATALOGUE_TEMPLATES.slice(0, INITIAL_VISIBLE);
+
+  // ── Render helpers ──
+
+  const renderIcon = (iconStr: string, size: number, color: string) =>
+    isEmojiString(iconStr) ? (
+      <Text style={{ fontSize: size - 4 }}>{iconStr}</Text>
+    ) : (
+      <PhosphorIcon name={iconStr} size={size} color={color} />
+    );
+
+  // ── JSX ──────────────────────────────────────────────────────────────────────
+
   return (
-    <SafeAreaView style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerShown: false, // Hide the default header to prevent overlap
-        }}
-      />
-      
-      {/* Custom Header */}
-      <View style={styles.customHeader}>
-        <Button
-          variant="ghost"
-          onPress={() => router.back()}
-          textStyle={styles.cancelButtonText}
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Header */}
+      <SafeAreaView style={{ backgroundColor: colors.headerBg }}>
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.headerBg,
+              borderBottomColor: colors.headerBorder,
+            },
+          ]}
         >
-          Cancel
-        </Button>
-        <Text style={styles.headerTitle}>New list</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-      <BodyScrollView contentContainerStyle={styles.scrollViewContent}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
-          
-          <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="List Name"
-              value={listName}
-              onChangeText={setListName}
-              returnKeyType="next"
-              variant="ghost"
-              size="lg"
-              autoFocus
-              inputStyle={styles.titleInput}
-              containerStyle={styles.titleInputContainer}
-            />
-            <Link
-              href={{ pathname: "/emoji-picker" }}
-              style={[styles.emojiButton, { borderColor: getColorValue(backgroundColour) }]}
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <Text style={[styles.headerAction, { color: appleBlue }]}>
+              Cancel
+            </Text>
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            New List
+          </Text>
+          <Pressable
+            onPress={handleCreateList}
+            disabled={!listName}
+            hitSlop={8}
+          >
+            <Text
+              style={[
+                styles.headerAction,
+                styles.headerActionBold,
+                { color: appleBlue, opacity: listName ? 1 : 0.4 },
+              ]}
             >
-              <View style={styles.emojiContainer}>
-                <Text>{selectedEmoji || icon}</Text>
+              Done
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+
+      <BodyScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 100 + insets.bottom },
+        ]}
+        keyboardDismissMode="on-drag"
+      >
+        {/* ── Choose a Template ── */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: colors.secondaryText }]}>
+            CHOOSE A TEMPLATE
+          </Text>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.groupedBg },
+            ]}
+          >
+            {visibleTemplates.map((t, index) => {
+              const isSelected =
+                selectedTemplateId === t.id && !isCustom;
+              const isLast =
+                index === visibleTemplates.length - 1 && !isCustom;
+              return (
+                <React.Fragment key={t.id || "__catalogue_default"}>
+                  <Pressable
+                    style={[
+                      styles.templateRow,
+                      isSelected && {
+                        backgroundColor: isDark ? "#1A3A5C" : "#EFF6FF",
+                      },
+                    ]}
+                    onPress={() => selectTemplate(t)}
+                  >
+                    <View
+                      style={[
+                        styles.templateIconCircle,
+                        {
+                          backgroundColor: isSelected
+                            ? getColorValue(t.backgroundColour || "blue")
+                            : isDark
+                              ? "#2C2C2E"
+                              : "#F2F2F7",
+                        },
+                      ]}
+                    >
+                      {renderIcon(
+                        t.icon || "📝",
+                        20,
+                        isSelected ? "#FFFFFF" : colors.secondaryText
+                      )}
+                    </View>
+                    <View style={styles.templateContent}>
+                      <Text
+                        style={[
+                          styles.templateName,
+                          { color: isSelected ? appleBlue : colors.text },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {t.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.templateDesc,
+                          { color: colors.secondaryText },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {t.description}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Check size={20} color={appleBlue} weight="bold" />
+                    )}
+                  </Pressable>
+                  {!isLast && (
+                    <View
+                      style={[
+                        styles.templateSeparator,
+                        { backgroundColor: colors.separator },
+                      ]}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
+
+            {/* ── Separator before Custom ── */}
+            <View
+              style={[
+                styles.templateSeparator,
+                { backgroundColor: colors.separator, marginLeft: 0 },
+              ]}
+            />
+
+            {/* ── Custom List option ── */}
+            <Pressable
+              style={[
+                styles.templateRow,
+                isCustom && {
+                  backgroundColor: isDark ? "#1A3A5C" : "#EFF6FF",
+                },
+              ]}
+              onPress={selectCustom}
+            >
+              <View
+                style={[
+                  styles.templateIconCircle,
+                  {
+                    backgroundColor: isCustom
+                      ? accentColor
+                      : isDark
+                        ? "#2C2C2E"
+                        : "#F2F2F7",
+                  },
+                ]}
+              >
+                <PencilSimple
+                  size={18}
+                  color={isCustom ? "#FFFFFF" : colors.secondaryText}
+                  weight={isCustom ? "fill" : "regular"}
+                />
               </View>
-            </Link>
+              <View style={styles.templateContent}>
+                <Text
+                  style={[
+                    styles.templateName,
+                    { color: isCustom ? appleBlue : colors.text },
+                  ]}
+                >
+                  Custom List
+                </Text>
+                <Text
+                  style={[
+                    styles.templateDesc,
+                    { color: colors.secondaryText },
+                  ]}
+                >
+                  Pick your own icon, color, and type
+                </Text>
+              </View>
+              {isCustom && (
+                <Check size={20} color={appleBlue} weight="bold" />
+              )}
+            </Pressable>
           </View>
 
-          <TextInput
-            placeholder="Purpose (optional)"
-            value={purpose}
-            onChangeText={setPurpose}
-            returnKeyType="next"
-            variant="ghost"
-            inputStyle={styles.input}
-          />
+          {CATALOGUE_TEMPLATES.length > INITIAL_VISIBLE && (
+            <Pressable style={styles.showAllButton} onPress={toggleShowAll}>
+              <Text style={[styles.showAllText, { color: appleBlue }]}>
+                {showAllTemplates
+                  ? "Show Less"
+                  : `Show All (${CATALOGUE_TEMPLATES.length})`}
+              </Text>
+              {showAllTemplates ? (
+                <CaretUp size={14} color={appleBlue} weight="bold" />
+              ) : (
+                <CaretDown size={14} color={appleBlue} weight="bold" />
+              )}
+            </Pressable>
+          )}
         </View>
 
+        {/* ── Name & Purpose (always visible) ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>List Type</Text>
-          <ScrollView horizontal style={styles.typeScrollView} showsHorizontalScrollIndicator={false}>
-            {LIST_TYPE.map((type) => (
-              <Pressable
-                key={type}
-                style={[
-                  styles.typeButton,
-                  selectedType === type && styles.selectedTypeButton
-                ]}
-                onPress={() => setSelectedType(type)}
-              >
-                <Text style={[
-                  styles.typeButtonText,
-                  selectedType === type && styles.selectedTypeButtonText
-                ]}>{type}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Background Color</Text>
-          <ScrollView horizontal style={styles.colorScrollView} showsHorizontalScrollIndicator={false}>
-            {BACKGROUND_COLOUR.map((color) => (
-              <Pressable
-                key={color}
-                style={[
-                  styles.colorOption,
-                  { backgroundColor: getColorValue(color) },
-                  backgroundColour === color && styles.selectedColorOption
-                ]}
-                onPress={() => setBackgroundColour(color)}
+          <Text style={[styles.sectionLabel, { color: colors.secondaryText }]}>
+            LIST DETAILS
+          </Text>
+          <View
+            style={[
+              styles.groupedCard,
+              { backgroundColor: colors.groupedBg },
+            ]}
+          >
+            <View style={styles.nameRow}>
+              <Link href={{ pathname: "/emoji-picker" }} asChild>
+                <Pressable
+                  style={[
+                    styles.emojiButton,
+                    { backgroundColor: accentColor },
+                  ]}
+                >
+                  {renderIcon(displayEmoji, 26, "#FFFFFF")}
+                </Pressable>
+              </Link>
+              <RNTextInput
+                style={[styles.nameInput, { color: colors.text }]}
+                placeholder="List Name"
+                placeholderTextColor={colors.tertiaryText}
+                value={listName}
+                onChangeText={setListName}
+                returnKeyType="next"
+                autoFocus
               />
-            ))}
-          </ScrollView>
+            </View>
+            <View
+              style={[
+                styles.rowSeparator,
+                { backgroundColor: colors.separator },
+              ]}
+            />
+            <RNTextInput
+              style={[styles.purposeInput, { color: colors.text }]}
+              placeholder="Description (optional)"
+              placeholderTextColor={colors.tertiaryText}
+              value={purpose}
+              onChangeText={setPurpose}
+              returnKeyType="done"
+              multiline
+            />
+          </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Template</Text>
-          <ScrollView style={styles.templateScrollView} showsVerticalScrollIndicator={false}>
-            {AVAILABLE_TEMPLATES.map((templateOption) => (
-              <Pressable
-                key={templateOption.id}
+        {/* ── Customization (only when Custom is selected) ── */}
+        {isCustom && (
+          <>
+            {/* Type */}
+            <View style={styles.section}>
+              <Text
                 style={[
-                  styles.templateOption,
-                  template === templateOption.id && styles.selectedTemplateOption
+                  styles.sectionLabel,
+                  { color: colors.secondaryText },
                 ]}
-                onPress={() => {
-                  setTemplate(templateOption.id);
-                  // Auto-populate system prompt and other fields when template is selected
-                  if (templateOption.id && templateOption.systemPrompt) {
-                    setSystemPrompt(templateOption.systemPrompt);
-                  } else {
-                    setSystemPrompt('');
-                  }
-                  if (templateOption.backgroundColour) {
-                    setBackgroundColour(templateOption.backgroundColour);
-                  }
-                  if (templateOption.type) {
-                    setSelectedType(templateOption.type);
-                  }
-                }}
               >
-                <View style={styles.templateContent}>
-                  <Text style={[
-                    styles.templateName,
-                    template === templateOption.id && styles.selectedTemplateName
-                  ]}>
-                    {templateOption.name}
-                  </Text>
-                  <Text style={[
-                    styles.templateDescription,
-                    template === templateOption.id && styles.selectedTemplateDescription
-                  ]}>
-                    {templateOption.description}
-                  </Text>
-                </View>
-                {template === templateOption.id && (
-                  <View style={styles.checkmark}>
-                    <Text style={styles.checkmarkText}>✓</Text>
-                  </View>
-                )}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
+                TYPE
+              </Text>
+              <View style={styles.typeGrid}>
+                {LIST_TYPE.map((type) => {
+                  const isSel = selectedType === type;
+                  const IC = TYPE_ICONS[type] || Cube;
+                  return (
+                    <Pressable
+                      key={type}
+                      style={[
+                        styles.typePill,
+                        {
+                          backgroundColor: isSel
+                            ? colors.pillSelectedBg
+                            : colors.pillBg,
+                          borderColor: isSel
+                            ? colors.pillSelectedBg
+                            : colors.pillBorder,
+                        },
+                      ]}
+                      onPress={() => setSelectedType(type)}
+                    >
+                      <IC
+                        size={16}
+                        color={isSel ? "#FFFFFF" : colors.secondaryText}
+                        weight={isSel ? "fill" : "regular"}
+                      />
+                      <Text
+                        style={[
+                          styles.typePillText,
+                          { color: isSel ? "#FFFFFF" : colors.text },
+                        ]}
+                      >
+                        {type}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
 
+            {/* Color */}
+            <View style={styles.section}>
+              <Text
+                style={[
+                  styles.sectionLabel,
+                  { color: colors.secondaryText },
+                ]}
+              >
+                COLOR
+              </Text>
+              <View
+                style={[
+                  styles.groupedCard,
+                  styles.colorCard,
+                  { backgroundColor: colors.groupedBg },
+                ]}
+              >
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.colorScrollContent}
+                >
+                  {BACKGROUND_COLOUR.map((c) => {
+                    const isSel = backgroundColour === c;
+                    return (
+                      <Pressable
+                        key={c}
+                        style={[
+                          styles.colorSwatch,
+                          { backgroundColor: getColorValue(c) },
+                          isSel && styles.colorSwatchSelected,
+                        ]}
+                        onPress={() => setBackgroundColour(c)}
+                      >
+                        {isSel && (
+                          <Check size={18} color="#FFFFFF" weight="bold" />
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* ── Advanced (collapsible) ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Advanced Options</Text>
-          
-          <TextInput
-            placeholder="System Prompt (optional)"
-            value={systemPrompt}
-            onChangeText={setSystemPrompt}
-            returnKeyType="next"
-            variant="ghost"
-            inputStyle={styles.input}
-            multiline
-          />
-          
-          <TextInput
-            placeholder="Number (optional)"
-            value={number}
-            onChangeText={setNumber}
-            returnKeyType="next"
-            variant="ghost"
-            inputStyle={styles.input}
-            keyboardType="numeric"
-          />
-          
-          <TextInput
-            placeholder="Code (optional)"
-            value={code}
-            onChangeText={setCode}
-            returnKeyType="done"
-            variant="ghost"
-            inputStyle={styles.input}
-            multiline
-          />
+          <Pressable
+            style={[
+              styles.advancedToggle,
+              showAdvanced && { marginBottom: 8 },
+            ]}
+            onPress={toggleAdvanced}
+          >
+            <Text
+              style={[
+                styles.sectionLabel,
+                styles.advancedLabel,
+                { color: colors.secondaryText },
+              ]}
+            >
+              ADVANCED
+            </Text>
+            {showAdvanced ? (
+              <CaretUp size={14} color={colors.secondaryText} weight="bold" />
+            ) : (
+              <CaretDown
+                size={14}
+                color={colors.secondaryText}
+                weight="bold"
+              />
+            )}
+          </Pressable>
+          {showAdvanced && (
+            <View
+              style={[
+                styles.groupedCard,
+                { backgroundColor: colors.groupedBg },
+              ]}
+            >
+              <RNTextInput
+                style={[styles.advancedInput, { color: colors.text }]}
+                placeholder="System Prompt"
+                placeholderTextColor={colors.tertiaryText}
+                value={systemPrompt}
+                onChangeText={setSystemPrompt}
+                multiline
+              />
+              <View
+                style={[
+                  styles.rowSeparator,
+                  { backgroundColor: colors.separator },
+                ]}
+              />
+              <RNTextInput
+                style={[styles.advancedInput, { color: colors.text }]}
+                placeholder="Number"
+                placeholderTextColor={colors.tertiaryText}
+                value={number}
+                onChangeText={setNumber}
+                keyboardType="numeric"
+              />
+              <View
+                style={[
+                  styles.rowSeparator,
+                  { backgroundColor: colors.separator },
+                ]}
+              />
+              <RNTextInput
+                style={[styles.advancedInput, { color: colors.text }]}
+                placeholder="Code"
+                placeholderTextColor={colors.tertiaryText}
+                value={code}
+                onChangeText={setCode}
+                multiline
+              />
+            </View>
+          )}
         </View>
-        <Button
-          onPress={handleCreateList}
-          disabled={!listName}
-          variant="ghost"
-          textStyle={styles.createButtonText}
-        >
-          Create list
-        </Button>
-        <Button
-          onPress={handleCreateTestLists}
-          variant="ghost"
-          textStyle={styles.createButtonText}
-        >
-          Create 10 test lists
-        </Button>
       </BodyScrollView>
 
-      {/* Follow-up Modal for AI Todo Generation */}
+      {/* ── Sticky Bottom CTA ── */}
+      <View
+        style={[
+          styles.bottomBar,
+          {
+            paddingBottom: Math.max(insets.bottom, 16),
+            backgroundColor: colors.bg,
+            borderTopColor: colors.separator,
+          },
+        ]}
+      >
+        <Pressable
+          style={[styles.createButton, { opacity: listName ? 1 : 0.5 }]}
+          onPress={handleCreateList}
+          disabled={!listName}
+        >
+          <Text style={styles.createButtonText}>Create List</Text>
+        </Pressable>
+      </View>
+
+      {/* ── Follow-up Modal ── */}
       {showFollowUpModal && (
         <View style={styles.modalOverlay}>
-          <View style={styles.followUpModal}>
-            <Text style={styles.followUpTitle}>List Created Successfully!</Text>
-            <Text style={styles.followUpSubtitle}>
-              Would you like me to create todos for this list using AI? 
-              I'll use the template's system prompt to generate relevant tasks based on your description.
+          <View
+            style={[styles.followUpModal, { backgroundColor: colors.cardBg }]}
+          >
+            <Text style={[styles.followUpTitle, { color: colors.text }]}>
+              List Created!
             </Text>
-            
+            <Text
+              style={[
+                styles.followUpSubtitle,
+                { color: colors.secondaryText },
+              ]}
+            >
+              Would you like to generate tasks using AI based on your template
+              and description?
+            </Text>
             <View style={styles.followUpButtons}>
-              <Pressable 
-                style={[styles.followUpButton, styles.generateButton]} 
+              <Pressable
+                style={[styles.followUpBtn, styles.generateBtn]}
                 onPress={handleGenerateTodos}
               >
-                <Text style={styles.generateButtonText}>Generate Todos</Text>
+                <Text style={styles.generateBtnText}>Generate Todos</Text>
               </Pressable>
-              
-              <Pressable 
-                style={[styles.followUpButton, styles.skipButton]} 
+              <Pressable
+                style={[
+                  styles.followUpBtn,
+                  {
+                    backgroundColor: colors.pillBg,
+                    borderWidth: 1,
+                    borderColor: colors.separator,
+                  },
+                ]}
                 onPress={handleSkipTodos}
               >
-                <Text style={styles.skipButtonText}>No Thanks</Text>
+                <Text style={[styles.skipBtnText, { color: colors.text }]}>
+                  No Thanks
+                </Text>
               </Pressable>
             </View>
           </View>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  customHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8E9EA',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  cancelButtonText: {
-    color: '#007AFF',
-    fontSize: 16,
-  },
-  headerSpacer: {
-    width: 60, // Same width as cancel button to center title
-  },
-  scrollViewContent: {
-    padding: 16,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 12,
-    color: "#1f2937",
-  },
-  inputContainer: {
+  container: { flex: 1 },
+
+  // Header
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  titleInput: {
+  headerTitle: { fontSize: 17, fontWeight: "600", letterSpacing: -0.4 },
+  headerAction: { fontSize: 17 },
+  headerActionBold: { fontWeight: "600" },
+
+  // Scroll
+  scrollContent: { paddingHorizontal: 16, paddingTop: 20 },
+
+  // Sections
+  section: { marginBottom: 24 },
+  sectionLabel: {
+    fontSize: 13,
     fontWeight: "600",
-    fontSize: 24,
-    padding: 0,
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginLeft: 16,
   },
-  titleInputContainer: {
-    flexGrow: 1,
-    flexShrink: 1,
-    maxWidth: "auto",
-    marginBottom: 0,
+
+  // Grouped card
+  groupedCard: { borderRadius: 12, overflow: "hidden" },
+
+  // Template rows
+  templateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
   },
-  input: {
-    padding: 0,
-    fontSize: 16,
-  },
-  emojiButton: {
-    padding: 1,
-    borderWidth: 3,
-    borderRadius: 100,
-  },
-  emojiContainer: {
+  templateIconCircle: {
     width: 36,
     height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  typeScrollView: {
-    flexGrow: 0,
+  templateContent: { flex: 1 },
+  templateName: { fontSize: 16, fontWeight: "600", letterSpacing: -0.2 },
+  templateDesc: { fontSize: 13, marginTop: 2, lineHeight: 18 },
+  templateSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 62,
   },
-  typeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderRadius: 16,
-    backgroundColor: "#f3f4f6",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+  showAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingTop: 10,
   },
-  selectedTypeButton: {
-    backgroundColor: appleBlue,
-    borderColor: appleBlue,
+  showAllText: { fontSize: 14, fontWeight: "500" },
+
+  // Name row
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 12,
   },
-  typeButtonText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#374151",
+  emojiButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  selectedTypeButtonText: {
-    color: "#ffffff",
-  },
-  colorScrollView: {
-    flexGrow: 0,
-  },
-  colorOption: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 12,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  selectedColorOption: {
-    borderColor: "#1f2937",
-    borderWidth: 3,
-  },
-  createButtonText: {
-    color: appleBlue,
-    fontWeight: "normal",
-  },
-  templateScrollView: {
-    maxHeight: 300,
-  },
-  templateOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 8,
-    borderRadius: 12,
-    backgroundColor: '#f9fafb',
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedTemplateOption: {
-    backgroundColor: '#eff6ff',
-    borderColor: appleBlue,
-  },
-  templateContent: {
+  nameInput: {
     flex: 1,
+    fontSize: 17,
+    fontWeight: "500",
+    paddingVertical: 8,
+    letterSpacing: -0.2,
   },
-  templateName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 4,
+  rowSeparator: { height: StyleSheet.hairlineWidth, marginLeft: 74 },
+  purposeInput: {
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 44,
   },
-  selectedTemplateName: {
-    color: appleBlue,
+
+  // Type grid
+  typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  typePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
   },
-  templateDescription: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
+  typePillText: { fontSize: 14, fontWeight: "500" },
+
+  // Color
+  colorCard: { paddingVertical: 14 },
+  colorScrollContent: { paddingHorizontal: 14, gap: 12 },
+  colorSwatch: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  selectedTemplateDescription: {
-    color: '#1e40af',
-  },
-  checkmark: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: appleBlue,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkmarkText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  followUpModal: {
-    backgroundColor: '#fff',
-    margin: 20,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
+  colorSwatchSelected: {
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
+    elevation: 4,
+    transform: [{ scale: 1.1 }],
+  },
+
+  // Advanced
+  advancedToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 16,
+    marginBottom: 0,
+  },
+  advancedLabel: { marginBottom: 0 },
+  advancedInput: {
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 44,
+  },
+
+  // Bottom CTA
+  bottomBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  createButton: {
+    backgroundColor: appleBlue,
+    borderRadius: 14,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createButtonText: {
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+
+  // Follow-up modal
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  followUpModal: {
+    marginHorizontal: 24,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
   },
   followUpTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 12,
-    textAlign: 'center',
+    fontWeight: "700",
+    marginBottom: 10,
+    textAlign: "center",
   },
   followUpSubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    lineHeight: 24,
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 22,
     marginBottom: 24,
   },
-  followUpButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  followUpButton: {
+  followUpButtons: { flexDirection: "row", gap: 12, width: "100%" },
+  followUpBtn: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
   },
-  generateButton: {
-    backgroundColor: appleBlue,
-  },
-  skipButton: {
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-  },
-  generateButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  skipButtonText: {
-    color: '#374151',
-    fontSize: 16,
-    fontWeight: '500',
-  },
+  generateBtn: { backgroundColor: appleBlue },
+  generateBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "600" },
+  skipBtnText: { fontSize: 16, fontWeight: "500" },
 });

@@ -150,6 +150,13 @@ export default function AppIndexLayout() {
                 }}
               />
               <Tabs.Screen
+                name="debug-templates"
+                options={{
+                  headerShown: false,
+                  href: null,
+                }}
+              />
+              <Tabs.Screen
                 name="profile"
                 options={{
                   presentation: "formSheet",
@@ -190,7 +197,7 @@ export default function AppIndexLayout() {
             </Tabs>
           </ListCreationProvider>
 
-          {process.env.EXPO_OS === "web" ? <Inspector /> : null}
+          {__DEV__ && process.env.EXPO_OS === "web" ? <Inspector /> : null}
         </WidgetProvider>
       </TTTStoreProvider>
     </SignedIn>

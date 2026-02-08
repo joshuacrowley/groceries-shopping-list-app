@@ -34,7 +34,7 @@
     "upgradeOnly": true
   },
   {
-    "template": "LeftoversTracker",
+    "template": "Leftovers",
     "name": "Leftovers",
     "purpose": "Get a handle on leftovers in your fridge and freezer for future meal plans",
     "type": "Food",
@@ -327,7 +327,7 @@
     "number": 120
   },
   {
-    "template": "PartyBagList",
+    "template": "PartyBags",
     "name": "Party Bags",
     "purpose": "Get your party bags on.",
     "type": "Fun",

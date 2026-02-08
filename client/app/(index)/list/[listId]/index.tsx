@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { ArrowLeft, PencilSimple } from 'phosphor-react-native';
 import { useRow, useStore, useAddRowCallback } from 'tinybase/ui-react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import TodoList from '@/Basic';
 import ShoppingListv2 from '@/templates/ShoppingListv2';
 import Today from '@/templates/Today';
@@ -37,17 +38,24 @@ import SchoolPickupRoster from '@/templates/SchoolPickupRoster';
 import SubscriptionTracker from '@/templates/SubscriptionTracker';
 import TidyUp from '@/templates/TidyUp';
 import PhotoUploader from '@/components/PhotoUploader';
-import Constants from 'expo-constants';
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
+import { callGeminiProxy } from '@/lib/geminiProxy';
+import { useAuth } from '@clerk/clerk-expo';
 
-// Initialize Gemini with API key from environment
-const getGeminiAPI = () => {
-  const apiKey = Constants.expoConfig?.extra?.GOOGLE_AI_API_KEY || process.env.EXPO_PUBLIC_GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Google AI API key not found. Please set EXPO_PUBLIC_GOOGLE_AI_API_KEY in your environment.");
-  }
-  return new GoogleGenAI({ apiKey });
+const COLOR_MAP: Record<string, { bg: string; icon: string }> = {
+  blue:   { bg: '#ebf8ff', icon: '#2b6cb0' },
+  green:  { bg: '#F0FFF4', icon: '#2F855A' },
+  red:    { bg: '#FFF5F5', icon: '#C53030' },
+  yellow: { bg: '#FFFFF0', icon: '#B7791F' },
+  purple: { bg: '#FAF5FF', icon: '#6B46C1' },
+  teal:   { bg: '#E6FFFA', icon: '#2C7A7B' },
+  orange: { bg: '#FFFAF0', icon: '#C05621' },
+  pink:   { bg: '#FFF5F7', icon: '#B83280' },
+  cyan:   { bg: '#EDFDFD', icon: '#0987A0' },
+  gray:   { bg: '#F7FAFC', icon: '#4A5568' },
 };
+
+const DEFAULT_COLORS = { bg: '#ebf8ff', icon: '#2b6cb0' };
 
 export default function ListDetailScreen() {
   const { 
@@ -61,6 +69,7 @@ export default function ListDetailScreen() {
   const list = useRow('lists', listId as string);
   const insets = useSafeAreaInsets();
   const store = useStore();
+  const { getToken } = useAuth();
   
   const [isGeneratingTodos, setIsGeneratingTodos] = useState(false);
   const [generationMessage, setGenerationMessage] = useState('');
@@ -100,15 +109,7 @@ export default function ListDetailScreen() {
       setIsGeneratingTodos(true);
       setGenerationMessage('Analyzing your photo and creating todos...');
       
-      console.log('Generating todos on device...');
-      
-      // Add polyfill for React Native if needed
-      if (typeof global.process === 'undefined') {
-        global.process = {
-          env: {},
-          version: '',
-        } as any;
-      }
+      console.log('Generating todos via server proxy...');
       
       // Define the response schema for structured output
       const responseSchema = {
@@ -210,19 +211,18 @@ Generate relevant, specific, and contextual todo items that match the style and 
 
 ${photoAnalysis ? `Context from photo: ${photoAnalysis}` : ''}`;
 
-      const genAI = getGeminiAPI();
+      const text = await callGeminiProxy(
+        {
+          model: 'gemini-2.5-flash',
+          contents: [{ text: prompt }],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: responseSchema
+          }
+        },
+        getToken
+      );
       
-      const response = await genAI.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ text: prompt }],
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: responseSchema
-        }
-      });
-      
-      // Get the response text directly - it will be valid JSON due to structured output
-      const text = response.text;
       console.log('Generated todos:', text);
       
       const result = JSON.parse(text);
@@ -257,14 +257,18 @@ ${photoAnalysis ? `Context from photo: ${photoAnalysis}` : ''}`;
     }
   };
   
+  // Derive colors from list's backgroundColour
+  const listColor = String(list?.backgroundColour || 'blue');
+  const colors = COLOR_MAP[listColor] || DEFAULT_COLORS;
+
   if (!list) {
     return (
       <View style={styles.container}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-          <Pressable onPress={() => router.push('/(index)')} style={styles.backButton}>
-            <Feather name="arrow-left" size={24} color="#2196F3" />
+          <Pressable onPress={() => router.push('/(index)')} style={styles.headerIcon}>
+            <ArrowLeft size={22} color="#4A5568" weight="regular" />
           </Pressable>
-          <Text style={styles.title}>List not found</Text>
+          <Text style={styles.errorTitle}>List not found</Text>
         </View>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>The requested list couldn't be found.</Text>
@@ -353,15 +357,19 @@ ${photoAnalysis ? `Context from photo: ${photoAnalysis}` : ''}`;
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <Pressable onPress={() => router.push('/(index)')} style={styles.backButton}>
-          <Feather name="arrow-left" size={24} color="#2196F3" />
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <StatusBar style="dark" />
+      <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: colors.bg }]}>
+        <Pressable onPress={() => router.push('/(index)')} style={styles.headerIcon}>
+          <ArrowLeft size={22} color={colors.icon} weight="regular" />
         </Pressable>
-        <Text style={styles.title}>{list.name}</Text>
-        <PhotoUploader listId={listId as string} />
-        <Pressable style={styles.menuButton}>
-          <Feather name="more-vertical" size={24} color="#757575" />
+        <View style={styles.spacer} />
+        <PhotoUploader listId={listId as string} iconOnly color={colors.icon} />
+        <Pressable 
+          onPress={() => router.push(`/list/${listId}/edit`)} 
+          style={styles.headerIcon}
+        >
+          <PencilSimple size={22} color={colors.icon} weight="regular" />
         </Pressable>
       </View>
       
@@ -384,28 +392,25 @@ ${photoAnalysis ? `Context from photo: ${photoAnalysis}` : ''}`;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
-  backButton: {
+  headerIcon: {
     padding: 8,
   },
-  title: {
+  spacer: {
+    flex: 1,
+  },
+  errorTitle: {
     flex: 1,
     fontSize: 18,
     fontWeight: 'bold',
     color: '#212121',
     marginLeft: 8,
-  },
-  menuButton: {
-    padding: 8,
   },
   errorContainer: {
     flex: 1,
