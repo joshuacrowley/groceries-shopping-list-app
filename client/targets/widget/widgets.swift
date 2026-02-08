@@ -38,16 +38,9 @@ struct widgetEntryView : View {
   @Environment(\.widgetFamily) var widgetFamily
   var entry: Provider.Entry
 
-  // Set to true to use mock data, false to use real data
-  let useMockData = false
-  
   var numberOfLists: String? {
-    if useMockData {
-      return "10"
-    } else {
-      let defaults = UserDefaults(suiteName: "group.com.joshuacrowley.tinytalkingtodo")
-      return defaults?.string(forKey: "widget_total_lists")
-    }
+    let defaults = UserDefaults(suiteName: "group.com.joshuacrowley.tinytalkingtodos")
+    return defaults?.string(forKey: "widget_total_lists")
   }
   
   struct RecentList: Codable {
@@ -57,35 +50,15 @@ struct widgetEntryView : View {
   }
   
   var recentLists: [RecentList]? {
-    if useMockData {
-      let allLists = [
-          RecentList(listId: "b0ad1f8c-5b49-44f6-b44c-52b8c1adb3a2", name: "Home Improvement", emoji: "🔨"),
-          RecentList(listId: "b28de207-4a6e-4ad6-bc54-80d7b4950233", name: "Holiday Gifts", emoji: "🎁"),
-          RecentList(listId: "c189d516-8559-49dd-80cd-9d98adbc0724", name: "Camping Trip", emoji: "⛺️"),
-          RecentList(listId: "dc15b0fc-939b-4413-ad43-fab803a1e3b6", name: "Office Supplies", emoji: "📎"),
-          RecentList(listId: "e21042a5-4958-4a97-8a81-cfd3a1a72b87", name: "Household Items", emoji: "🏠"),
-          RecentList(listId: "f1b15f8c-6d62-4f97-9eaa-36bca1abc2f7", name: "Groceries", emoji: "🛒"),
-          RecentList(listId: "g25ae307-8f97-4acd-89e6-05fcb1a98434", name: "Workout Gear", emoji: "🏋️‍♂️"),
-          RecentList(listId: "h36cf417-7a56-49dd-bc98-1ebca9bc72e5", name: "Tech Gadgets", emoji: "💻"),
-          RecentList(listId: "i47df527-9b67-4f86-9cd3-2fc9c2bc73f6", name: "Pet Supplies", emoji: "🐾"),
-          RecentList(listId: "j58ef637-0c78-4a87-8de4-3fdba3cd74f7", name: "Party Planning", emoji: "🎉")
-      ]
-      
-      if widgetFamily == .systemSmall || widgetFamily == .systemMedium {
-        return Array(allLists.prefix(3))
-      }
-      return allLists
-    } else {
-      let defaults = UserDefaults(suiteName: "group.com.joshuacrowley.tinytalkingtodo")
-      guard let data = defaults?.data(forKey: "widget_recent_lists"),
-            let lists = try? JSONDecoder().decode([RecentList].self, from: data) else {
-        return nil
-      }
-      if widgetFamily == .systemSmall || widgetFamily == .systemMedium {
-        return Array(lists.prefix(3))
-      }
-      return lists
+    let defaults = UserDefaults(suiteName: "group.com.joshuacrowley.tinytalkingtodos")
+    guard let data = defaults?.data(forKey: "widget_recent_lists"),
+          let lists = try? JSONDecoder().decode([RecentList].self, from: data) else {
+      return nil
     }
+    if widgetFamily == .systemSmall || widgetFamily == .systemMedium {
+      return Array(lists.prefix(3))
+    }
+    return lists
   }
   
   var body: some View {
