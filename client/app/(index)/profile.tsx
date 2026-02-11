@@ -43,7 +43,6 @@ export default function ProfileScreen() {
               router.replace("/(auth)");
             } catch (err) {
               Alert.alert("Error", "Failed to delete account. Please try again.");
-              console.error(err);
             }
           },
         },

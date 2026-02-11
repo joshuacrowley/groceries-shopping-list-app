@@ -1,19 +1,32 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, SafeAreaView, StatusBar, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, SectionList, Pressable, ActivityIndicator, SafeAreaView, StatusBar, Animated } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useStore, useRowIds, useAddRowCallback } from 'tinybase/ui-react';
 import { useOrganization, useAuth, useUser, useClerk } from '@clerk/clerk-expo';
 import ListCard, { CARD_WIDTH, CARD_MARGIN } from '@/components/ListCard';
+import PhosphorIcon from '@/components/PhosphorIcon';
 import VoiceModal from '@/components/VoiceModal';
 import ListCreationOptionsModal from '@/components/ListCreationOptionsModal';
 import BottomSheet from '@/components/BottomSheet';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 import { LIST_TYPE } from '@/stores/schema';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import * as Haptics from 'expo-haptics';
+
+// Category icons for section headers
+const CATEGORY_ICONS: Record<string, string> = {
+  Info: 'Info',
+  Home: 'House',
+  Life: 'Heart',
+  Food: 'ForkKnife',
+  Stuff: 'Package',
+  Fun: 'GameController',
+  Health: 'FirstAid',
+  Learn: 'BookOpen',
+  Money: 'CurrencyDollar',
+};
 
 export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
@@ -33,11 +46,7 @@ export default function HomeScreen() {
   const instructionOpacity = useRef(new Animated.Value(0)).current;
   const hintPulse = useRef(new Animated.Value(0.6)).current;
   const filterDrawerAnim = useRef(new Animated.Value(0)).current;
-  const flatListRef = useRef<FlatList>(null);
-  const [scrubberActive, setScrubberActive] = useState(false);
-  const scrubberY = useRef(new Animated.Value(0)).current;
-  const [scrubberLabel, setScrubberLabel] = useState('');
-  const [listAreaHeight, setListAreaHeight] = useState(SCREEN_HEIGHT * 0.6);
+  const sectionListRef = useRef<SectionList>(null);
   
   // Theme colors
   const colorScheme = useColorScheme();
@@ -128,6 +137,25 @@ export default function HomeScreen() {
 
     return filtered;
   }, [listIds, selectedTopic, sortBy, store]);
+
+  // Group filtered lists into sections by category
+  const groupedSections = useMemo(() => {
+    const groups: Record<string, string[]> = {};
+    filteredAndSortedLists.forEach(listId => {
+      const listData = store?.getRow('lists', listId);
+      const type = String(listData?.type || 'Info');
+      if (!groups[type]) groups[type] = [];
+      groups[type].push(listId);
+    });
+
+    return LIST_TYPE
+      .filter(type => groups[type] && groups[type].length > 0)
+      .map(type => ({
+        title: type,
+        icon: CATEGORY_ICONS[type] || 'List',
+        data: groups[type],
+      }));
+  }, [filteredAndSortedLists, store]);
   
   const addList = useAddRowCallback(
     'lists',
@@ -187,34 +215,26 @@ export default function HomeScreen() {
     }).start();
   }, [filterDrawerVisible]);
 
-  // Scrubber handler
-  const handleScrubberGesture = useCallback((evt: any) => {
-    const { locationY } = evt.nativeEvent;
-    const clampedY = Math.max(0, Math.min(locationY, listAreaHeight));
-    const ratio = clampedY / listAreaHeight;
-    const index = Math.round(ratio * (filteredAndSortedLists.length - 1));
-    
-    if (index >= 0 && index < filteredAndSortedLists.length) {
-      const listId = filteredAndSortedLists[index];
-      const listData = store?.getRow('lists', listId);
-      setScrubberLabel(String(listData?.name || ''));
-      
-      flatListRef.current?.scrollToIndex({
-        index,
-        animated: false,
-        viewPosition: 0,
-      });
-    }
-    
-    scrubberY.setValue(clampedY);
-  }, [filteredAndSortedLists, listAreaHeight, store]);
+  const renderSectionHeader = useCallback(({ section }: { section: any }) => (
+    <View style={styles.sectionHeader}>
+      <PhosphorIcon 
+        name={section.icon} 
+        size={14} 
+        color={secondaryText} 
+        weight="bold"
+      />
+      <Text style={[styles.sectionTitle, { color: secondaryText }]}>
+        {section.title}
+      </Text>
+      <View style={[styles.sectionDivider, { backgroundColor: borderColor }]} />
+    </View>
+  ), [secondaryText, borderColor]);
 
   const renderListCard = ({ item: listId }) => {
     return <ListCard listId={listId} onPress={handleListPress} />;
   };
 
   const handleCreateList = () => {
-    console.log('[index.tsx] Opening create list modal');
     setCreateModalVisible(true);
   };
   
@@ -228,7 +248,7 @@ export default function HomeScreen() {
       await signOut();
       router.replace('/(auth)');
     } catch (error) {
-      console.error('Sign out error:', error);
+      // Sign out failed silently
     }
   };
 
@@ -309,70 +329,17 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       ) : (
-        <View 
-          style={styles.listAreaWrapper} 
-          onLayout={(e) => setListAreaHeight(e.nativeEvent.layout.height)}
-        >
-          <FlatList
-            ref={flatListRef}
-            data={filteredAndSortedLists}
+        <View style={styles.listAreaWrapper}>
+          <SectionList
+            ref={sectionListRef}
+            sections={groupedSections}
             renderItem={renderListCard}
+            renderSectionHeader={renderSectionHeader}
             keyExtractor={(item) => item}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listCardsContainer}
-            onScrollToIndexFailed={(info) => {
-              flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-            }}
+            stickySectionHeadersEnabled={false}
           />
-          {/* Fast-scroll scrubber - only show when 5+ lists */}
-          {filteredAndSortedLists.length >= 5 && (
-            <View 
-              style={styles.scrubberTrack}
-              onStartShouldSetResponder={() => true}
-              onMoveShouldSetResponder={() => true}
-              onResponderGrant={(evt) => {
-                setScrubberActive(true);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                handleScrubberGesture(evt);
-              }}
-              onResponderMove={(evt) => {
-                handleScrubberGesture(evt);
-              }}
-              onResponderRelease={() => {
-                setScrubberActive(false);
-                setScrubberLabel('');
-              }}
-            >
-              <View style={[styles.scrubberLine, { backgroundColor: scrubberActive ? primaryBlue : (isDark ? 'rgba(255,255,255,0.15)' : '#E5E7EB') }]} />
-              {/* Scrubber thumb */}
-              {scrubberActive && (
-                <Animated.View 
-                  style={[
-                    styles.scrubberThumb,
-                    { 
-                      backgroundColor: primaryBlue,
-                      transform: [{ translateY: Animated.subtract(scrubberY, new Animated.Value(10)) }],
-                    }
-                  ]}
-                />
-              )}
-              {/* Floating label */}
-              {scrubberActive && scrubberLabel !== '' && (
-                <Animated.View 
-                  style={[
-                    styles.scrubberLabelContainer,
-                    { 
-                      backgroundColor: primaryBlue,
-                      transform: [{ translateY: Animated.subtract(scrubberY, new Animated.Value(16)) }],
-                    }
-                  ]}
-                >
-                  <Text style={styles.scrubberLabelText} numberOfLines={1}>{scrubberLabel}</Text>
-                  <View style={[styles.scrubberLabelArrow, { borderLeftColor: primaryBlue }]} />
-                </Animated.View>
-              )}
-            </View>
-          )}
         </View>
       )}
 
@@ -508,7 +475,6 @@ export default function HomeScreen() {
       <ListCreationOptionsModal
         visible={createModalVisible}
         onClose={() => {
-          console.log('[index.tsx] Closing create list modal');
           setCreateModalVisible(false);
         }}
       />
@@ -591,8 +557,27 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   listCardsContainer: {
-    paddingTop: 12,
+    paddingTop: 4,
     paddingBottom: 100,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+    gap: 6,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  sectionDivider: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 8,
   },
   emptyState: {
     flex: 1,
@@ -784,64 +769,5 @@ const styles = StyleSheet.create({
   drawerSortText: {
     fontSize: 14,
     fontWeight: '500',
-  },
-
-  // Scrubber
-  scrubberTrack: {
-    position: 'absolute',
-    right: 0,
-    top: 12,
-    bottom: 100,
-    width: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  scrubberLine: {
-    width: 3,
-    height: '100%',
-    borderRadius: 1.5,
-  },
-  scrubberThumb: {
-    position: 'absolute',
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  scrubberLabelContainer: {
-    position: 'absolute',
-    right: 32,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    maxWidth: 160,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  scrubberLabelText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  scrubberLabelArrow: {
-    position: 'absolute',
-    right: -6,
-    top: '50%',
-    marginTop: -4,
-    width: 0,
-    height: 0,
-    borderTopWidth: 4,
-    borderBottomWidth: 4,
-    borderLeftWidth: 6,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
   },
 });

@@ -1,19 +1,15 @@
 import React from "react";
 import { useNetworkState } from "expo-network";
-import { Redirect, router, Tabs } from "expo-router";
+import { Redirect, Tabs } from "expo-router";
 import { Alert } from "react-native";
-import { Inspector } from "tinybase/ui-react-inspector";
-import { Button } from "@/components/ui/button";
 import { ListCreationProvider } from "@/context/ListCreationContext";
 import { SignedIn, useUser } from "@clerk/clerk-expo";
-import { WidgetProvider } from "@/contexts/WidgetContext";
 import TTTStoreProvider from "@/stores/TTTStore";
+import { StatusBar } from "expo-status-bar";
 
 export const unstable_settings = {
   initialRouteName: "index",
 };
-
-import { StatusBar } from "expo-status-bar";
 
 export default function AppIndexLayout() {
   const { user } = useUser();
@@ -39,8 +35,7 @@ export default function AppIndexLayout() {
     <SignedIn>
       <StatusBar style="auto" animated />
       <TTTStoreProvider>
-        <WidgetProvider>
-          <ListCreationProvider>
+        <ListCreationProvider>
             <Tabs
               screenOptions={{
                 ...(process.env.EXPO_OS !== "ios"
@@ -59,17 +54,6 @@ export default function AppIndexLayout() {
                 tabBarStyle: { display: "none" }, // Hide the tab bar
               }}
             >
-              {/* Hidden: List creation form
-              <Tabs.Screen
-                name="list/new/index"
-                options={{
-                  presentation: "formSheet",
-                  sheetGrabberVisible: true,
-                  headerShown: false,
-                  href: null,
-                }}
-              />
-              */}
               <Tabs.Screen
                 name="list/[listId]/index"
                 options={{
@@ -99,22 +83,6 @@ export default function AppIndexLayout() {
                   href: null,
                 }}
               />
-              {/* Hidden: Scan QR for new list
-              <Tabs.Screen
-                name="list/new/scan"
-                options={{
-                  presentation: "fullScreenModal",
-                  headerLargeTitle: false,
-                  headerTitle: "Scan QR code",
-                  headerLeft: () => (
-                    <Button variant="ghost" onPress={() => router.back()}>
-                      Cancel
-                    </Button>
-                  ),
-                  href: null,
-                }}
-              />
-              */}
               <Tabs.Screen
                 name="list/[listId]/product/[productId]"
                 options={{
@@ -140,20 +108,6 @@ export default function AppIndexLayout() {
                 name="lists"
                 options={{
                   headerShown: false
-                }}
-              />
-              <Tabs.Screen
-                name="test"
-                options={{
-                  headerShown: false,
-                  href: null,
-                }}
-              />
-              <Tabs.Screen
-                name="debug-templates"
-                options={{
-                  headerShown: false,
-                  href: null,
                 }}
               />
               <Tabs.Screen
@@ -189,6 +143,13 @@ export default function AppIndexLayout() {
                 }}
               />
               <Tabs.Screen
+                name="debug-templates"
+                options={{
+                  headerShown: false,
+                  href: null,
+                }}
+              />
+              <Tabs.Screen
                 name="index"
                 options={{
                   headerShown: false,
@@ -196,9 +157,6 @@ export default function AppIndexLayout() {
               />
             </Tabs>
           </ListCreationProvider>
-
-          {__DEV__ && process.env.EXPO_OS === "web" ? <Inspector /> : null}
-        </WidgetProvider>
       </TTTStoreProvider>
     </SignedIn>
   );

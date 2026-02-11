@@ -32,7 +32,6 @@ const IconSelector: React.FC<IconSelectorProps> = ({
         );
         setIconNames(names);
       } catch (error) {
-        console.error('Error loading icon names:', error);
         setIconNames(['List', 'CheckCircle', 'WarningCircle', 'Info', 'Plus']);
       } finally {
         setIsLoading(false);

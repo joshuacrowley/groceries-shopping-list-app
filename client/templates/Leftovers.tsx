@@ -83,7 +83,7 @@ export default function Leftovers({ listId }: { listId: string }) {
   const handleAdd = useCallback(() => { if (newItem.trim()) { addItem({ text: newItem.trim() }); setNewItem(""); } }, [newItem, addItem]);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>

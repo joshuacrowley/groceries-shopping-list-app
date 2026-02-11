@@ -1,6 +1,5 @@
 import * as React from "react";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
 import { View, Pressable, Linking, useColorScheme, Platform } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { BodyScrollView } from "@/components/ui/BodyScrollView";
@@ -18,7 +17,6 @@ export default function SignUpScreen() {
   const { isLoaded, signUp, setActive } = useSignUp();
   const { startOAuthFlow: startGoogleOAuthFlow } = useOAuth({ strategy: "oauth_google" });
   const { startAppleAuthenticationFlow } = useSignInWithApple();
-  const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
 
@@ -54,7 +52,6 @@ export default function SignUpScreen() {
       setPendingVerification(true);
     } catch (err) {
       if (isClerkAPIResponseError(err)) setErrors(err.errors);
-      console.error(JSON.stringify(err, null, 2));
     } finally {
       setIsLoading(false);
     }
@@ -71,11 +68,10 @@ export default function SignUpScreen() {
       
       if (createdSessionId) {
         await setActive!({ session: createdSessionId });
-        router.replace("/(index)");
+        // Navigation is handled by (auth)/_layout.tsx redirect when isSignedIn changes
       }
     } catch (err) {
       if (isClerkAPIResponseError(err)) setErrors(err.errors);
-      console.error("Google OAuth error:", JSON.stringify(err, null, 2));
     } finally {
       setIsGoogleSigningIn(false);
     }
@@ -93,12 +89,11 @@ export default function SignUpScreen() {
 
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
-        router.replace("/(index)");
+        // Navigation is handled by (auth)/_layout.tsx redirect when isSignedIn changes
       }
     } catch (err: any) {
       if (err.code === "ERR_REQUEST_CANCELED") return;
       if (isClerkAPIResponseError(err)) setErrors(err.errors);
-      console.error("Apple Sign-In error:", JSON.stringify(err, null, 2));
     } finally {
       setIsAppleSigningIn(false);
     }
@@ -122,17 +117,10 @@ export default function SignUpScreen() {
       // and redirect the user
       if (signUpAttempt.status === "complete") {
         await setActive({ session: signUpAttempt.createdSessionId });
-        router.replace("/");
-      } else {
-        // If the status is not complete, check why. User may need to
-        // complete further steps.
-        console.error(JSON.stringify(signUpAttempt, null, 2));
+        // Navigation is handled by (auth)/_layout.tsx redirect when isSignedIn changes
       }
     } catch (err) {
-      // See https://clerk.com/docs/custom-flows/error-handling
-      // for more info on error handling
-      console.error(JSON.stringify(err, null, 2));
-      setErrors(err.errors);
+      if (isClerkAPIResponseError(err)) setErrors(err.errors);
     } finally {
       setIsLoading(false);
     }

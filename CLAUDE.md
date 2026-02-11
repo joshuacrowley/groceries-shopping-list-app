@@ -25,16 +25,10 @@ bun dev                      # Start local development server (wrangler dev)
 bun run deploy              # Deploy to Cloudflare Workers
 ```
 
-### Widget Development
-```bash
-cd client
-npx expo prebuild --template node_modules/@bacons/apple-targets/prebuild-blank.tgz --clean
-```
-
 ## Architecture Overview
 
 ### Project Structure
-- **client/**: Expo React Native app with iOS widget support
+- **client/**: Expo React Native app
 - **server/**: Cloudflare Worker with Durable Objects for real-time sync
 
 ### State Management with TinyBase
@@ -94,8 +88,3 @@ const store = createMergeableStore().setSchema(shoppingListSchema)
 - Clerk session determines data access
 - Organization membership required for list access
 - Token refresh handled automatically for WebSocket connections
-
-## iOS Widget Integration
-- Uses `@bacons/apple-targets` for native widget support
-- Shared data between app and widget via App Groups
-- Widget code in `targets/widget/` directory

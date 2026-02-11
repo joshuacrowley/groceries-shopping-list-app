@@ -66,7 +66,7 @@ export default function Clothes({ listId }: { listId: string }) {
   const progress = todoIds.length > 0 ? Math.round((doneCount / todoIds.length) * 100) : 0;
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>

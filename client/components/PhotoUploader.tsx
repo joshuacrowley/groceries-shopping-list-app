@@ -29,8 +29,6 @@ const callGeminiAPI = async (
   currentTodos: any[],
   getToken: () => Promise<string | null>
 ) => {
-  console.log("Calling Gemini API via server proxy...");
-
   // Define the response schema for structured output
   const responseSchema = {
     type: Type.OBJECT,
@@ -85,8 +83,6 @@ const callGeminiAPI = async (
   Generate relevant, specific, and contextual todo items that match the style and purpose of the current list.
   Please only provide the new todos, not the existing todos provided for context.`;
 
-  console.log("Making request to Gemini API via proxy...");
-
   try {
     const text = await callGeminiProxy(
       {
@@ -108,14 +104,10 @@ const callGeminiAPI = async (
       getToken
     );
     
-    console.log("Gemini response received via proxy");
-    console.log("Structured response:", text);
-    
     // Parse the JSON response directly
     const parsedResponse = JSON.parse(text);
     return parsedResponse;
   } catch (error) {
-    console.error("Gemini API proxy error:", error);
     throw error;
   }
 };
@@ -149,7 +141,6 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
   );
 
   const handlePhotoPress = async () => {
-    console.log("Photo button pressed");
     Alert.alert(
       "Add Photo",
       "How would you like to add a photo?",
@@ -160,7 +151,6 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
             try {
               await openCamera();
             } catch (error) {
-              console.error("Error opening camera:", error);
               Alert.alert("Error", "Failed to open camera: " + error.message);
             }
           },
@@ -171,7 +161,6 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
             try {
               await openImageLibrary();
             } catch (error) {
-              console.error("Error opening image library:", error);
               Alert.alert("Error", "Failed to open photo library: " + error.message);
             }
           },
@@ -185,21 +174,14 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
   };
 
   const openCamera = async () => {
-    console.log("Opening camera...");
-    
     try {
-      // Request camera permissions
-      console.log("Requesting camera permissions...");
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      console.log("Camera permission result:", permissionResult);
       
       if (permissionResult.granted === false) {
-        console.log("Camera permission denied");
         Alert.alert("Permission Required", "Permission to access camera is required!");
         return;
       }
 
-      console.log("Launching camera...");
       // Launch camera
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: 'images',
@@ -209,36 +191,22 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
         base64: false,
       });
 
-      console.log("Camera result:", result);
-
       if (!result.canceled && result.assets[0]) {
-        console.log("Processing camera result...");
         await processImageResult(result.assets[0]);
-      } else {
-        console.log("Camera was canceled or no assets");
       }
     } catch (error) {
-      console.error("Error in openCamera:", error);
       Alert.alert("Camera Error", "Failed to open camera: " + error.message);
     }
   };
 
   const openImageLibrary = async () => {
-    console.log("Opening image library...");
-    
     try {
-      // Request photo library permissions
-      console.log("Requesting media library permissions...");
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      console.log("Media library permission result:", permissionResult);
       
       if (permissionResult.granted === false) {
-        console.log("Media library permission denied");
         Alert.alert("Permission Required", "Permission to access photo library is required!");
         return;
       }
-
-      console.log("Launching image library...");
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -248,32 +216,22 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
         base64: true, // Enable base64 encoding
       });
 
-      console.log("Image library result:", result);
-
       if (!result.canceled && result.assets[0]) {
-        console.log("Processing image library result...");
         await processImageResult(result.assets[0]);
-      } else {
-        console.log("Image library was canceled or no assets");
       }
     } catch (error) {
-      console.error("Error in openImageLibrary:", error);
       Alert.alert("Image Library Error", "Failed to open photo library: " + error.message);
     }
   };
 
   const processImageResult = async (asset: ImagePicker.ImagePickerAsset) => {
-    console.log("Processing image result:", asset);
     setIsUploading(true);
     
     try {
-      console.log("Calling handlePhotoSelected with URI:", asset.uri);
-      console.log("Base64 data available:", !!asset.base64);
       
       // Pass the base64 data directly if available
       await handlePhotoSelected(asset.uri, asset.mimeType || 'image/jpeg', asset.base64);
     } catch (error) {
-      console.error("Error processing image:", error);
       Alert.alert(
         "Error", 
         "Failed to process the image. Please try again."
@@ -300,17 +258,12 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
 
   const handlePhotoSelected = useCallback(
     async (uri: string, mimeType: string, base64Data?: string) => {
-      console.log("Platform:", Platform.OS);
-      console.log("Base64 data provided:", !!base64Data);
-      
       const currentTodos = todoIds
         .slice(0, 5)
         .map((id) => store.getRow("todos", id));
 
       try {
         const base64Image = base64Data || await convertUriToBase64(uri);
-        
-        console.log("Calling Google Gemini API directly...");
         
         // Call Google Gemini API via server proxy
         const result = await callGeminiAPI(base64Image, mimeType, {
@@ -321,8 +274,6 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
         }, currentTodos, getToken);
         
         if (result && result.todos) {
-          console.log(`Generated ${result.todos.length} todos from image`);
-          
           store.transaction(() => {
             for (const todo of result.todos) {
               addTodo(todo);
@@ -337,8 +288,6 @@ const PhotoUploader: React.FC<PhotoUploaderProps> = ({ listId, iconOnly, color }
           throw new Error("No todos generated from the image");
         }
       } catch (error) {
-        console.error("Error generating todos:", error);
-        
         let errorMessage = "Failed to generate todos from the image. Please try again.";
         if (error instanceof Error) {
           if (error.message === 'Request timeout') {

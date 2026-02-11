@@ -72,7 +72,6 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
         ]
       );
     } catch (error) {
-      console.error('Error requesting camera permission:', error);
       Alert.alert('Error', 'Failed to access camera. Please try again.');
     }
   };
@@ -110,10 +109,6 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
           mimeType = 'image/jpeg';
         }
         
-        console.log('Asset type from picker:', asset.type);
-        console.log('Using MIME type:', mimeType);
-        console.log('Base64 data available:', !!asset.base64);
-        
         // Close the modal
         onClose();
         
@@ -131,7 +126,6 @@ const ListCreationOptionsModal: React.FC<ListCreationOptionsModalProps> = ({
         setIsProcessing(false);
       }
     } catch (error) {
-      console.error('Error capturing photo:', error);
       Alert.alert('Error', 'Failed to capture photo. Please try again.');
       setIsProcessing(false);
     }

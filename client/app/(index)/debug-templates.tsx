@@ -9,7 +9,7 @@ import {
   ScrollView,
   LayoutAnimation,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Redirect, Stack, useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useStore } from "tinybase/ui-react";
 import PhosphorIcon from "@/components/PhosphorIcon";
@@ -357,6 +357,11 @@ export default function DebugTemplatesScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const router = useRouter();
+
+  // Only accessible in dev mode
+  if (!__DEV__) {
+    return <Redirect href="/(index)" />;
+  }
   const store = useStore();
   const [filter, setFilter] = useState<FilterMode>("with-todos");
   const [isSeeded, setIsSeeded] = useState(false);
@@ -562,6 +567,8 @@ export default function DebugTemplatesScreen() {
       <ScrollView
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
       >
         {filteredTemplates.map((template, idx) => (
           <TemplateCard

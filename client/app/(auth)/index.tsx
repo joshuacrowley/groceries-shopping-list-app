@@ -321,7 +321,7 @@ export default function SignIn() {
 
       if (signInAttempt.status === "complete") {
         await setActive({ session: signInAttempt.createdSessionId });
-        router.replace("/(index)");
+        // Navigation is handled by (auth)/_layout.tsx redirect when isSignedIn changes
       } else {
         if (__DEV__) console.error(JSON.stringify(signInAttempt, null, 2));
       }
@@ -344,7 +344,7 @@ export default function SignIn() {
 
       if (createdSessionId) {
         await setActive!({ session: createdSessionId });
-        router.replace("/(index)");
+        // Navigation is handled by (auth)/_layout.tsx redirect when isSignedIn changes
       }
     } catch (err) {
       if (isClerkAPIResponseError(err)) setErrors(err.errors);
@@ -366,7 +366,7 @@ export default function SignIn() {
 
       if (createdSessionId && setActive) {
         await setActive({ session: createdSessionId });
-        router.replace("/(index)");
+        // Navigation is handled by (auth)/_layout.tsx redirect when isSignedIn changes
       }
     } catch (err: any) {
       if (err.code === "ERR_REQUEST_CANCELED") return;
@@ -619,6 +619,7 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: 28,
+    lineHeight: 36,
     fontWeight: "800",
     marginBottom: 8,
     letterSpacing: -0.5,

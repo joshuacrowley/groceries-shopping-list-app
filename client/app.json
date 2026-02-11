@@ -3,7 +3,7 @@
     "sdkVersion": "53.0.0",
     "name": "Tiny Talking Todos",
     "slug": "tiny-talking-todos",
-    "version": "0.0.1",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/adaptive-icon.png",
     "scheme": "tinytalkingtodos",
@@ -16,16 +16,10 @@
       "usesAppleSignIn": true,
       "icon": {
         "light": "./assets/images/adaptive-icon.png",
-        "dark": "./assets/images/icon-dark.png",
-        "tinted": "./assets/images/icon-tinted.png"
+        "dark": "./assets/images/dark-logo.png"
       },
       "config": {
         "usesNonExemptEncryption": false
-      },
-      "entitlements": {
-        "com.apple.security.application-groups": [
-          "group.com.joshuacrowley.tinytalkingtodos"
-        ]
       }
     },
     "android": {
@@ -54,7 +48,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-            "image": "./assets/images/adaptive-icon.png",
+            "image": "./assets/images/dark-logo.png",
             "backgroundColor": "#000000"
           }
         }
@@ -77,7 +71,6 @@
       "expo-sqlite",
       "expo-secure-store",
       "expo-font",
-      "@bacons/apple-targets",
       [
         "expo-audio",
         {
@@ -94,40 +87,14 @@
         "origin": false
       },
       "eas": {
-        "projectId": "f46d33fa-6227-4139-91d5-de3484385a9b",
-        "build": {
-          "experimental": {
-            "ios": {
-              "appExtensions": [
-                {
-                  "bundleIdentifier": "com.joshuacrowley.tinytalkingtodos.widget",
-                  "targetName": "widget",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.com.joshuacrowley.tinytalkingtodos"
-                    ]
-                  }
-                },
-                {
-                  "bundleIdentifier": "com.joshuacrowley.tinytalkingtodos.widget",
-                  "targetName": "widget",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.com.joshuacrowley.tinytalkingtodos"
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        }
+        "projectId": "f46d33fa-6227-4139-91d5-de3484385a9b"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/7428a2a2-f953-4c9f-8be3-74117e5fdc8d"
+      "url": "https://u.expo.dev/f46d33fa-6227-4139-91d5-de3484385a9b"
     },
     "owner": "joshuacrowley"
   }

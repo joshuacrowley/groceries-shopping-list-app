@@ -162,6 +162,7 @@ const TaskItem = memo(({ id, isTodaySection }: { id: string; isTodaySection: boo
                 style={styles.detailInput}
                 defaultValue={String(taskData.text || "")}
                 onEndEditing={(e) => handleTextUpdate(e.nativeEvent.text)}
+                returnKeyType="done"
               />
             </View>
             <View style={styles.detailRow}>
@@ -171,6 +172,8 @@ const TaskItem = memo(({ id, isTodaySection }: { id: string; isTodaySection: boo
                 defaultValue={String(taskData.notes || "")}
                 onEndEditing={(e) => handleNotesUpdate(e.nativeEvent.text)}
                 multiline
+                blurOnSubmit={true}
+                returnKeyType="done"
               />
             </View>
             <View style={styles.detailDateRow}>
@@ -181,6 +184,7 @@ const TaskItem = memo(({ id, isTodaySection }: { id: string; isTodaySection: boo
                   defaultValue={String(taskData.date || "")}
                   placeholder="YYYY-MM-DD"
                   onEndEditing={(e) => handleDateUpdate(e.nativeEvent.text)}
+                  returnKeyType="done"
                 />
               </View>
               <View style={styles.detailHalf}>
@@ -190,6 +194,7 @@ const TaskItem = memo(({ id, isTodaySection }: { id: string; isTodaySection: boo
                   defaultValue={String(taskData.time || "")}
                   placeholder="HH:MM"
                   onEndEditing={(e) => handleTimeUpdate(e.nativeEvent.text)}
+                  returnKeyType="done"
                 />
               </View>
             </View>
@@ -253,6 +258,7 @@ const AddTaskModal = memo(
                 onChangeText={(text) => setTask({ ...task, text })}
                 style={styles.modalInput}
                 placeholderTextColor="#A0AEC0"
+                returnKeyType="done"
               />
               <TextInput
                 placeholder="Notes (optional)"
@@ -262,6 +268,8 @@ const AddTaskModal = memo(
                 multiline
                 numberOfLines={3}
                 placeholderTextColor="#A0AEC0"
+                blurOnSubmit={true}
+                returnKeyType="done"
               />
               <View style={styles.dateTimeRow}>
                 <TextInput
@@ -270,6 +278,7 @@ const AddTaskModal = memo(
                   onChangeText={(date) => setTask({ ...task, date })}
                   style={[styles.modalInput, styles.halfInput]}
                   placeholderTextColor="#A0AEC0"
+                  returnKeyType="done"
                 />
                 <TextInput
                   placeholder="Time (HH:MM)"
@@ -277,6 +286,7 @@ const AddTaskModal = memo(
                   onChangeText={(time) => setTask({ ...task, time })}
                   style={[styles.modalInput, styles.halfInput]}
                   placeholderTextColor="#A0AEC0"
+                  returnKeyType="done"
                 />
               </View>
             </View>
@@ -354,7 +364,7 @@ export default function Today({ listId }: { listId: string }) {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+        <ScrollView style={styles.scrollView} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
         <View style={styles.mainContent}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>

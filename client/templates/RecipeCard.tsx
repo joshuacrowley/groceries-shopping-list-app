@@ -174,7 +174,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ visible, onClose, onAdd }) 
             </Pressable>
           </View>
 
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
             <View style={styles.inputContainer}>
               <View style={styles.taskRow}>
                 <Pressable
@@ -189,6 +189,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ visible, onClose, onAdd }) 
                   placeholder="Task description"
                   value={newTask.text}
                   onChangeText={(text) => setNewTask({ ...newTask, text })}
+                  returnKeyType="done"
                 />
               </View>
             </View>
@@ -200,6 +201,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ visible, onClose, onAdd }) 
                 placeholder="Recipe name"
                 value={newTask.notes}
                 onChangeText={(text) => setNewTask({ ...newTask, notes: text })}
+                returnKeyType="done"
               />
             </View>
 
@@ -210,6 +212,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ visible, onClose, onAdd }) 
                 placeholder="HH:MM"
                 value={newTask.time}
                 onChangeText={(text) => setNewTask({ ...newTask, time: text })}
+                returnKeyType="done"
               />
             </View>
 
@@ -328,7 +331,7 @@ const BatchCookingList: React.FC<BatchCookingListProps> = ({ listId }) => {
   );
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>

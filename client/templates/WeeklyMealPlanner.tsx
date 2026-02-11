@@ -229,7 +229,7 @@ export default function WeeklyMealPlanner({ listId }: { listId: string }) {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -300,6 +300,7 @@ export default function WeeklyMealPlanner({ listId }: { listId: string }) {
                 value={newMeal.text}
                 onChangeText={(text) => setNewMeal({ ...newMeal, text })}
                 placeholderTextColor="#A0AEC0"
+                returnKeyType="done"
               />
 
               <Text style={styles.fieldLabel}>Meal Type:</Text>

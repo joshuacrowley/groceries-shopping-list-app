@@ -24,7 +24,6 @@ const getAvailableTemplates = () => {
       description: item.purpose || item.type || 'No description available'
     }));
   
-  console.log('Available templates:', templates);
   return templates;
 };
 
@@ -94,8 +93,6 @@ export default function PhotoAnalysisScreen() {
 
   const processBase64FromUri = async () => {
     try {
-      console.log('Converting photo to base64...');
-      
       // Fetch the image and convert to base64
       const response = await fetch(photoUri);
       const blob = await response.blob();
@@ -103,18 +100,15 @@ export default function PhotoAnalysisScreen() {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = (reader.result as string).split(',')[1];
-        console.log('Base64 conversion complete');
         setBase64Image(base64);
         analyzePhotoForTemplates(base64);
       };
       reader.onerror = () => {
-        console.error('Failed to convert image to base64');
         setError('Failed to process image. Please try again.');
         setIsAnalyzing(false);
       };
       reader.readAsDataURL(blob);
     } catch (error) {
-      console.error('Error processing image:', error);
       setError('Failed to process image. Please try again.');
       setIsAnalyzing(false);
     }
@@ -129,9 +123,6 @@ export default function PhotoAnalysisScreen() {
     }
 
     try {
-      console.log('Starting photo analysis via server proxy...');
-      console.log('Using model: gemini-2.5-flash');
-
       const availableTemplates = getAvailableTemplates();
       
       // Define the response schema for structured output
@@ -196,9 +187,6 @@ ANALYSIS INSTRUCTIONS:
 
 Focus on practical utility - choose templates that would actually help the user organize the content they photographed.`;
 
-      console.log('Calling Gemini API via proxy...');
-      console.log('Image data length:', dataToAnalyze.length);
-      
       const text = await callGeminiProxy(
         {
           model: 'gemini-2.5-flash',
@@ -218,9 +206,6 @@ Focus on practical utility - choose templates that would actually help the user 
         },
         getToken
       );
-      
-      console.log('Gemini response received via proxy');
-      console.log('Structured response:', text);
       
       // Parse the JSON response
       const parsedResponse = JSON.parse(text);
@@ -261,12 +246,6 @@ Focus on practical utility - choose templates that would actually help the user 
       setIsAnalyzing(false);
 
     } catch (error: any) {
-      console.error('Error analyzing photo:', error);
-      console.error('Error details:', {
-        message: error.message,
-        name: error.name,
-      });
-      
       let errorMessage = 'Failed to analyze photo. Please try again.';
       
       if (error.message?.includes('timeout')) {
@@ -312,8 +291,6 @@ Focus on practical utility - choose templates that would actually help the user 
   };
 
   const handleTemplateSelect = (suggestion: TemplateSuggestion) => {
-    console.log('Template selected:', suggestion.templateId);
-    
     // Get the full template data from catalogue
     const templateData = catalogue.find(t => t.template === suggestion.templateId);
     if (!templateData) {
@@ -337,8 +314,6 @@ Focus on practical utility - choose templates that would actually help the user 
         code: ''
       });
     });
-    
-    console.log('List created with ID:', listId);
     
     // Navigate to the list detail screen with parameters for todo generation
     router.replace({

@@ -113,12 +113,13 @@ const TodoList = ({ listId }) => {
           placeholder="Add a new task"
           style={styles.input}
           onSubmitEditing={handleAddClick}
+          returnKeyType="done"
         />
         <Pressable onPress={handleAddClick} style={styles.addButton}>
           <Text style={styles.addButtonText}>Add</Text>
         </Pressable>
       </View>
-      <ScrollView style={styles.todoList}>
+      <ScrollView style={styles.todoList} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
         {todoIds.map((id) => (
           <TodoItem key={id} id={id} />
         ))}

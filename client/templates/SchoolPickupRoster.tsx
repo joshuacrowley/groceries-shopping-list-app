@@ -60,7 +60,7 @@ export default function SchoolPickupRoster({ listId }: { listId: string }) {
   const handleAdd = useCallback(() => { if (newName.trim()) { addItem({ text: newName.trim() }); setNewName(""); } }, [newName, addItem]);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>

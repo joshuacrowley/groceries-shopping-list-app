@@ -48,7 +48,7 @@ export default function MentalLoad({ listId }: { listId: string }) {
   const progressPct = todoIds.length > 0 ? Math.round((doneCount / todoIds.length) * 100) : 0;
 
   return (
-    <ScrollView style={styles.container}><View style={styles.content}>
+    <ScrollView style={styles.container} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled"><View style={styles.content}>
       <View style={styles.header}><Brain size={32} color="#805AD5" weight="fill" /><View><Text style={styles.title}>{String(listData?.name || "Mental Load")}</Text><Text style={styles.subtitle}>{progressPct}% offloaded</Text></View>{todoIds.length > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{doneCount}/{todoIds.length}</Text></View>}</View>
       {todoIds.length > 0 && <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${progressPct}%` }]} /></View>}
       <View style={styles.addSection}>

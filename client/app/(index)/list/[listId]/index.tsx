@@ -109,8 +109,6 @@ export default function ListDetailScreen() {
       setIsGeneratingTodos(true);
       setGenerationMessage('Analyzing your photo and creating todos...');
       
-      console.log('Generating todos via server proxy...');
-      
       // Define the response schema for structured output
       const responseSchema = {
         type: Type.OBJECT,
@@ -223,8 +221,6 @@ ${photoAnalysis ? `Context from photo: ${photoAnalysis}` : ''}`;
         getToken
       );
       
-      console.log('Generated todos:', text);
-      
       const result = JSON.parse(text);
       
       if (result.todos && result.todos.length > 0) {
@@ -248,7 +244,6 @@ ${photoAnalysis ? `Context from photo: ${photoAnalysis}` : ''}`;
       }
       
     } catch (error) {
-      console.error('Error generating todos:', error);
       Alert.alert(
         'Generation Failed',
         'Unable to generate todos from your photo. You can add todos manually.',

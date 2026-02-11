@@ -156,6 +156,7 @@ const RecipeItem = memo(({ id }: { id: string }) => {
                   )
                 }
                 keyboardType="number-pad"
+                returnKeyType="done"
               />
             </View>
             <View style={[styles.expandedField, { flex: 2 }]}>
@@ -168,6 +169,7 @@ const RecipeItem = memo(({ id }: { id: string }) => {
                 }
                 placeholder="Recipe URL"
                 autoCapitalize="none"
+                returnKeyType="done"
               />
             </View>
           </View>
@@ -233,7 +235,7 @@ export default function Recipes({ listId }: { listId: string }) {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -286,7 +288,7 @@ export default function Recipes({ listId }: { listId: string }) {
               </Pressable>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
               <View style={styles.emojiRow}>
                 <Pressable style={styles.emojiButton}>
                   <Text style={styles.selectedEmoji}>{newRecipe.emoji}</Text>
@@ -297,6 +299,7 @@ export default function Recipes({ listId }: { listId: string }) {
                   value={newRecipe.text}
                   onChangeText={(text) => setNewRecipe({ ...newRecipe, text })}
                   placeholderTextColor="#A0AEC0"
+                  returnKeyType="done"
                 />
               </View>
 
@@ -364,6 +367,7 @@ export default function Recipes({ listId }: { listId: string }) {
                 onChangeText={(url) => setNewRecipe({ ...newRecipe, url })}
                 autoCapitalize="none"
                 placeholderTextColor="#A0AEC0"
+                returnKeyType="done"
               />
 
               <Text style={styles.fieldLabel}>Serves:</Text>
@@ -374,6 +378,7 @@ export default function Recipes({ listId }: { listId: string }) {
                   setNewRecipe({ ...newRecipe, number: parseInt(text, 10) || 1 })
                 }
                 keyboardType="number-pad"
+                returnKeyType="done"
               />
             </ScrollView>
 

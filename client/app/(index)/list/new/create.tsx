@@ -87,6 +87,7 @@ const CATALOGUE_TEMPLATES = catalogue
     backgroundColour: t.backgroundColour || "blue",
     icon: t.icon || "📝",
   }))
+  .filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i)
   .slice(0, 20);
 
 // Special sentinel for "Custom list"

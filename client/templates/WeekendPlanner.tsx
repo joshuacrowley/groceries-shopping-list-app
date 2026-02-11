@@ -145,6 +145,7 @@ const ActivityItem = memo(({ id }: { id: string }) => {
               }
               keyboardType="number-pad"
               placeholder="9"
+              returnKeyType="done"
             />
           </View>
 
@@ -235,7 +236,7 @@ export default function WeekendPlanner({ listId }: { listId: string }) {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -302,13 +303,14 @@ export default function WeekendPlanner({ listId }: { listId: string }) {
               </Pressable>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled">
               <TextInput
                 style={styles.modalInput}
                 placeholder="Activity name"
                 value={newActivity.text}
                 onChangeText={(text) => setNewActivity({ ...newActivity, text })}
                 placeholderTextColor="#A0AEC0"
+                returnKeyType="done"
               />
 
               <Text style={styles.fieldLabel}>Day:</Text>
@@ -351,6 +353,7 @@ export default function WeekendPlanner({ listId }: { listId: string }) {
                   setNewActivity({ ...newActivity, number: parseInt(text, 10) || 0 })
                 }
                 keyboardType="number-pad"
+                returnKeyType="done"
               />
 
               <Text style={styles.fieldLabel}>Notes:</Text>

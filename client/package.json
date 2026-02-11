@@ -1,5 +1,5 @@
 {
-  "name": "groceries-shopping-list",
+  "name": "tiny-talking-todos",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
@@ -7,7 +7,6 @@
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "prewidget": "npx expo prebuild --template node_modules/@bacons/apple-targets/prebuild-blank.tgz --clean",
     "web": "expo start --web",
     "test": "jest --watchAll",
     "lint": "expo lint",
@@ -18,7 +17,6 @@
     "preset": "jest-expo"
   },
   "dependencies": {
-    "@bacons/apple-targets": "^0.2.0",
     "@clerk/clerk-expo": "^2.19.22",
     "@expo/vector-icons": "^14.1.0",
     "@google/genai": "^1.10.0",
